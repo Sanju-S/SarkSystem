@@ -42,9 +42,13 @@ cv = ''
 is_auth = False
 
 script_run = False
+rip = 0
 commands = []
 alias = {}
 g_alias = {}
+run_now = False
+else_stat = False
+while_loop = 0
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -241,6 +245,7 @@ def getHostname():
     conn.commit()
     return g.strip('\n')
 
+
 def isInt(c):
     try:
         int(c)
@@ -294,7 +299,7 @@ def su(c, user):
                 for i in os.listdir('C:/Users/sanjsark/SarkSys/0-ss/2-home'):
                     if i.endswith(c[1]):
                         ind = i.split('-')[0]
-                os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1]))
+                #os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1]))
                 home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1])
                 variables = {}
                 alias = {}
@@ -315,7 +320,7 @@ def su(c, user):
                 clear()
                 llogin('core')
                 login('core')
-                os.chdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
+                #os.chdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
                 home = 'C:/Users/sanjsark/SarkSys/0-ss/1-core'
                 variables = {}
                 alias = {}
@@ -338,7 +343,7 @@ def su(c, user):
                     llogin(c[1])
                     login(c[1])
                     if c[1] == 'core':
-                        os.chdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
+                        #os.chdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
                         home = 'C:/Users/sanjsark/SarkSys/0-ss/1-core'
                         variables = {}
                         alias = {}
@@ -347,7 +352,7 @@ def su(c, user):
                     for i in os.listdir('C:/Users/sanjsark/SarkSys/0-ss/2-home'):
                         if i.endswith(c[1]):
                             ind = i.split('-')[0]
-                    os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1]))
+                    #os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1]))
                     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1])
                     variables = {}
                     return c[1]
@@ -854,19 +859,19 @@ def mkdir(c):
                 i = givePerm(user, c[1])
                 os.mkdir(str(i)+'-'+c[1])
             else:
-                print("E: you dont have permisson")
+                print("E: Permission denied")
         elif isGroup:
             if p[4] == 'w':
                 i = givePerm(user, c[1])
                 os.mkdir(str(i)+'-'+c[1])
             else:
-                print("E: you dont have permisson")
+                print("E: Permission denied")
         else:
             if p[7] == 'w':
                 i = givePerm(user, c[1])
                 os.mkdir(str(i)+'-'+c[1])
             else:
-                print("E: you dont have permisson")
+                print("E: Permission denied")
 
 def rmdir(c):
     if c[1].startswith('/'):
@@ -1497,7 +1502,7 @@ def cat (c):
                                 else:
                                     print(i)
                     else:
-                        print("E: " + i + " - you dont have permisson")
+                        print("E: " + i + " - Permission denied")
                 elif isGroup(j):
                     if p[3] == 'r':
                         with open(j, 'r') as f:
@@ -1507,7 +1512,7 @@ def cat (c):
                                 else:
                                     print(i)
                     else:
-                        print("E: " + i + " - you dont have permisson")
+                        print("E: " + i + " - Permission denied")
                 else:
                     if p[6] == 'r':
                         with open(j, 'r') as f:
@@ -1517,7 +1522,7 @@ def cat (c):
                                 else:
                                     print(i)
                     else:
-                        print("E: " + i + " - you dont have permisson")
+                        print("E: " + i + " - Permission denied")
         if not found:
             print("E: " + i + " - no such file")
 
@@ -1826,12 +1831,54 @@ def echo(c):
                     l.append(i[1:])
             else:
                 l.append(i)
-        print(' '.join(l))
+        print(' '.join([str(x) for x in l]))
+
+def check_if_num(c):
+    #breakpoint()
+    global variables
+    x = []
+    for i in c[2:]:
+        if i in '+ - * / ( )'.split(' '):
+            x.append(i)
+            continue
+        if i.startswith('$'):
+            if i[1:] in variables:
+                if type(variables[i[1:]]) in [int, float]:
+                    x.append(variables[i[1:]])
+                else:
+                    return False
+        else:
+            if isInt(i):
+                x.append(int(i))
+            elif isFloat(i):
+                x.append(float(i))
+            else:
+                return False
+    return evaluate(' '.join([str(s) for s in x]))
 
 def var(c):
+    #breakpoint()
     global variables
+    if isInt(c[0][0]) or isFloat(c[0][0]):
+        print("E: variable cannot be/begin with number")
+        return
     if len(c) > 3:
-        variables[c[0]] = ' '.join(c[2:])
+        if ('+' in c or '-' in c or '*' in c or '/' in c) and c[2] != '!':
+            if type(check_if_num(c)) in [int, float]:
+                variables[c[0]] = check_if_num(c)
+            else:
+                x = []
+                for i in c[2:]:
+                    if i.startswith('$'):
+                        if i[1:] in variables:
+                            x.append(variables[i[1:]])
+                    else:
+                        x.append(i)
+                variables[c[0]] = ' '.join(x)
+        else:
+            if c[2] == '!':
+                del c[2]
+            variables[c[0]] = ' '.join(c[2:])
     else:
         if isInt(c[2]):
             variables[c[0]] = int(c[2])
@@ -1839,6 +1886,86 @@ def var(c):
             variables[c[0]] = float(c[2])
         else:
             variables[c[0]] = str(c[2])
+
+def precedence(op): 
+	
+	if op == '+' or op == '-': 
+		return 1
+	if op == '*' or op == '/': 
+		return 2
+	return 0
+
+def applyOp(a, b, op): 
+	
+	if op == '+': return a + b 
+	if op == '-': return a - b 
+	if op == '*': return a * b 
+	if op == '/': return a // b 
+
+def evaluate(tokens): 
+	
+	values = [] 
+	
+	ops = [] 
+	i = 0
+	
+	while i < len(tokens): 
+		
+		if tokens[i] == ' ': 
+			i += 1
+			continue
+		
+		elif tokens[i] == '(': 
+			ops.append(tokens[i]) 
+		
+		elif tokens[i].isdigit(): 
+			val = 0
+			
+			while (i < len(tokens) and
+				tokens[i].isdigit()): 
+			
+				val = (val * 10) + int(tokens[i]) 
+				i += 1
+			
+			values.append(val) 
+		
+		elif tokens[i] == ')': 
+		
+			while len(ops) != 0 and ops[-1] != '(': 
+			
+				val2 = values.pop() 
+				val1 = values.pop() 
+				op = ops.pop() 
+				
+				values.append(applyOp(val1, val2, op)) 
+			
+			ops.pop() 
+		
+		else: 
+			while (len(ops) != 0 and
+				precedence(ops[-1]) >= precedence(tokens[i])): 
+						
+				val2 = values.pop() 
+				val1 = values.pop() 
+				op = ops.pop() 
+				
+				values.append(applyOp(val1, val2, op)) 
+			
+			ops.append(tokens[i]) 
+		
+		i += 1
+	
+	while len(ops) != 0: 
+		
+		val2 = values.pop() 
+		val1 = values.pop() 
+		op = ops.pop() 
+				
+		values.append(applyOp(val1, val2, op)) 
+	
+	return values[-1] 
+
+
 
 def read(c):
     if len(c) > 2:
@@ -2260,7 +2387,7 @@ def editor(c):
                             if int(ip[0]) <= len(lines):
                                 if int(ip[1]) <= len(lines[int(ip[0])-1].split(' ')):
                                     l = lines[int(ip[0])-1].split(' ')
-                                    l.insert(int(ip[1]), ' '.join(inp[2:]))
+                                    l.insert(int(ip[1])-1, ' '.join(inp[2:]))
                                     lines[int(ip[0])-1] = ' '.join(l)
                                 else:
                                     e = ("E: length of line " + ip[0] + " is smaller")
@@ -2394,6 +2521,961 @@ def get_alias():
                         g_alias[i.split('=')[0]] = i.split('=')[1].strip('\n')
             except:
                 pass
+
+
+
+def isVarb(v):
+    global variables
+    if v[1:] in variables:
+        return variables[v[1:]]
+    else:
+        return False
+
+
+def ifstat(c):
+    #breakpoint()
+    global script_run
+    global commands
+    global varibales
+    global rip
+    global else_stat
+    if len(c) > 2 and c[-1] == 'then':
+        run = False
+        if len(c) == 3:
+            if c[1].startswith('$'):
+                if c[1][1:] in variables and variables[c[1][1:]] not in ['0', '', 'False']:
+                    run = True
+            elif c[1] not in ['0', '', 'False']:
+                run = True
+        elif c[2]in ['<', '>', '==', '!=', '<=', '>=']:
+            if isInt(c[1]):
+                if isInt(c[3]):
+                    if c[2] == '<':
+                        if int(c[1]) < int(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if int(c[1]) > int(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if int(c[1]) == int(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if int(c[1]) != int(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if int(c[1]) <= int(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if int(c[1]) >= int(c[3]):
+                            run = True
+                elif isFloat(c[3]):
+                    if c[2] == '<':
+                        if int(c[1]) < float(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if int(c[1]) > float(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if int(c[1]) == float(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if int(c[1]) != float(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if int(c[1]) <= float(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if int(c[1]) >= float(c[3]):
+                            run = True
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])):
+                        if c[2] == '<':
+                            if int(c[1]) < int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if int(c[1]) > int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if int(c[1]) == int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if int(c[1]) != int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if int(c[1]) <= int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if int(c[1]) >= int(isVarb(c[3])):
+                                run = True
+                    elif isFloat(isVarb(c[3])):
+                        if c[2] == '<':
+                            if int(c[1]) < float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if int(c[1]) > float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if int(c[1]) == float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if int(c[1]) != float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if int(c[1]) <= float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if int(c[1]) >= float(isVarb(c[3])):
+                                run = True
+                    else:
+                        print("E: can't compare int with string")
+                else:
+                    print("E: can't compare int with string")
+            elif isFloat(c[1]):
+                if isInt(c[3]):
+                    if c[2] == '<':
+                        if float(c[1]) < int(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if float(c[1]) > int(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if float(c[1]) == int(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if float(c[1]) != int(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if float(c[1]) <= int(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if float(c[1]) >= int(c[3]):
+                            run = True
+                elif isFloat(c[3]):
+                    if c[2] == '<':
+                        if float(c[1]) < float(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if float(c[1]) > float(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if float(c[1]) == float(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if float(c[1]) != float(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if float(c[1]) <= float(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if float(c[1]) >= float(c[3]):
+                            run = True
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])):
+                        if c[2] == '<':
+                            if float(c[1]) < int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= int(isVarb(c[3])):
+                                run = True
+                    elif isFloat(isVarb(c[3])):
+                        if c[2] == '<':
+                            if float(c[1]) < float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= float(isVarb(c[3])):
+                                run = True
+                    else:
+                        print("E: can't compare float with string")
+                else:
+                    print("E: can't compare float with string")
+            elif isVarb(c[1]):
+                if isInt(isVarb(c[1])):
+                    if isInt(c[3]):
+                        if c[2] == '<':
+                            if int(isVarb(c[1])) < int(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if int(isVarb(c[1])) > int(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if int(isVarb(c[1])) == int(c[3]): 
+                                run = True
+                        if c[2] == '!=':
+                            if int(isVarb(c[1])) != int(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if int(isVarb(c[1])) <= int(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if int(isVarb(c[1])) >= int(c[3]):
+                                run = True
+                    elif isFloat(c[3]):
+                        if c[2] == '<':
+                            if int(isVarb(c[1])) < float(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if int(isVarb(c[1])) > float(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if int(isVarb(c[1])) == float(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if int(isVarb(c[1])) != float(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if int(isVarb(c[1])) <= float(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if int(isVarb(c[1])) >= float(c[3]):
+                                run = True
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])):
+                            if c[2] == '<':
+                                if int(isVarb(c[1])) < int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>':
+                                if int(isVarb(c[1])) > int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '==':
+                                if int(isVarb(c[1])) == int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '!=':
+                                if int(isVarb(c[1])) != int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '<=':
+                                if int(isVarb(c[1])) <= int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>=':
+                                if int(isVarb(c[1])) >= int(isVarb(c[3])):
+                                    run = True
+                        elif isFloat(isVarb(c[3])):
+                            if c[2] == '<':
+                                if int(isVarb(c[1])) < float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>':
+                                if int(isVarb(c[1])) > float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '==':
+                                if int(isVarb(c[1])) == float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '!=':
+                                if int(isVarb(c[1])) != float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '<=':
+                                if int(isVarb(c[1])) <= float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>=':
+                                if int(isVarb(c[1])) >= float(isVarb(c[3])):
+                                    run = True
+                        else:
+                            print("E: can't compare int with string")
+                    else:
+                        print("E: can't compare int with string")
+                elif isFloat(isVarb(c[1])):
+                    if isInt(c[3]):
+                        if c[2] == '<':
+                            if float(c[1]) < int(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > int(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == int(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != int(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= int(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= int(c[3]):
+                                run = True
+                    elif isFloat(c[3]):
+                        if c[2] == '<':
+                            if float(c[1]) < float(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > float(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == float(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != float(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= float(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= float(c[3]):
+                                run = True
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])):
+                            if c[2] == '<':
+                                if float(c[1]) < int(c[3]):
+                                    run = True
+                            if c[2] == '>':
+                                if float(c[1]) > int(c[3]):
+                                    run = True
+                            if c[2] == '==':
+                                if float(c[1]) == int(c[3]):
+                                    run = True
+                            if c[2] == '!=':
+                                if float(c[1]) != int(c[3]):
+                                    run = True
+                            if c[2] == '<=':
+                                if float(c[1]) <= int(c[3]):
+                                    run = True
+                            if c[2] == '>=':
+                                if float(c[1]) >= int(c[3]):
+                                    run = True
+                        elif isFloat(isVarb(c[3])):
+                            if c[2] == '<':
+                                if float(c[1]) < float(c[3]):
+                                    run = True
+                            if c[2] == '>':
+                                if float(c[1]) > float(c[3]):
+                                    run = True
+                            if c[2] == '==':
+                                if float(c[1]) == float(c[3]):
+                                    run = True
+                            if c[2] == '!=':
+                                if float(c[1]) != float(c[3]):
+                                    run = True
+                            if c[2] == '<=':
+                                if float(c[1]) <= float(c[3]):
+                                    run = True
+                            if c[2] == '>=':
+                                if float(c[1]) >= float(c[3]):
+                                    run = True
+                        else:
+                            print("E: can't compare float with string")
+                    else:
+                        print("E: can't compare float with string")
+                else:
+                    x = isVarb(c[1])
+                    if isInt(c[3]) or isInt(c[3]):
+                        print("E: can't compare string with int/float")
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])) or isInt(isVarb(c[3])):
+                            print("E: can't compare string with int/float")
+                        else:
+                            y = isVarb(c[3])
+                            if c[2] == '==':
+                                if x == y:
+                                    run = True
+                            if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                            if c[2] == '<':
+                                if x < y:
+                                    run = True
+                            if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                            if c[2] == '>':
+                                if x > y:
+                                    run = True
+                            if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+                    else:
+                        y = isVarb(c[3])
+                        if c[2] == '==':
+                                if x == y:
+                                    run = True
+                        if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                        if c[2] == '<':
+                                if x < y:
+                                    run = True
+                        if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                        if c[2] == '>':
+                                if x > y:
+                                    run = True
+                        if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+            else:
+                breakpoint()
+                if isInt(c[3]) or isInt(c[3]):
+                    print("E: can't compare string with int/float")
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])) or isInt(isVarb(c[3])):
+                        print("E: can't compare string with int/float")
+                    else:
+                        y = isVarb(c[3])
+                        if c[2] == '==':
+                                if x == y:
+                                    run = True
+                        if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                        if c[2] == '<':
+                                if x < y:
+                                    run = True
+                        if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                        if c[2] == '>':
+                                if x > y:
+                                    run = True
+                        if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+                else:
+                    y = isVarb(c[3])
+                    if c[2] == '==':
+                                if isVarb(c[1]) == y:
+                                    run = True
+                    if c[2] == '!=':
+                                if isVarb(c[1]) != y:
+                                    run = True
+                    if c[2] == '<':
+                                if isVarb(c[1]) < y:
+                                    run = True
+                    if c[2] == '<=':
+                                if isVarb(c[1]) <= y:
+                                    run = True
+                    if c[2] == '>':
+                                if isVarb(c[1]) > y:
+                                    run = True
+                    if c[2] == '>=':
+                                if isVarb(c[1]) >= y:
+                                    run = True
+        #breakpoint()
+        if script_run:
+            if run:
+                else_stat = False
+                return
+            else:
+                for ij in range(rip, len(commands)):
+                    if commands[ij] == 'else':
+                        rip += ij
+                        else_stat = True
+                        return
+        ifb = []
+        elb = []
+        mode = 'if'
+        while True:
+                x = input('> ')
+                if x == 'fi':
+                    break
+                if x == 'else':
+                    mode = 'else'
+                    continue
+                if mode == 'if':
+                    if x:
+                        ifb.append(x)
+                else:
+                    if x:
+                        elb.append(x)
+        if run:
+            script_run = True
+            for i in ifb:
+                commands.append(i.strip('\n'))
+        elif mode == 'else':
+            script_run = True
+            for i in elb:
+                commands.append(i.strip('\n'))
+        else:
+            return
+    else:
+        print("E: incorrect syntax")
+
+
+def whileloop(c):
+    global script_run
+    global commands
+    global varibales
+    global rip
+    global while_rip
+    if len(c) > 2 and c[-1] == 'do':
+        run = False
+        while_rip = rip - 1
+        if len(c) == 3:
+            if c[1].startswith('$'):
+                if c[1][1:] in variables and variables[c[1][1:]] not in ['0', '', 'False']:
+                    run = True
+            elif c[1] not in ['0', '', 'False']:
+                run = True
+        elif c[2]in ['<', '>', '==', '!=', '<=', '>=']:
+            if isInt(c[1]):
+                if isInt(c[3]):
+                    if c[2] == '<':
+                        if int(c[1]) < int(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if int(c[1]) > int(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if int(c[1]) == int(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if int(c[1]) != int(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if int(c[1]) <= int(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if int(c[1]) >= int(c[3]):
+                            run = True
+                elif isFloat(c[3]):
+                    if c[2] == '<':
+                        if int(c[1]) < float(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if int(c[1]) > float(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if int(c[1]) == float(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if int(c[1]) != float(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if int(c[1]) <= float(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if int(c[1]) >= float(c[3]):
+                            run = True
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])):
+                        if c[2] == '<':
+                            if int(c[1]) < int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if int(c[1]) > int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if int(c[1]) == int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if int(c[1]) != int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if int(c[1]) <= int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if int(c[1]) >= int(isVarb(c[3])):
+                                run = True
+                    elif isFloat(isVarb(c[3])):
+                        if c[2] == '<':
+                            if int(c[1]) < float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if int(c[1]) > float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if int(c[1]) == float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if int(c[1]) != float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if int(c[1]) <= float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if int(c[1]) >= float(isVarb(c[3])):
+                                run = True
+                    else:
+                        print("E: can't compare int with string")
+                else:
+                    print("E: can't compare int with string")
+            elif isFloat(c[1]):
+                if isInt(c[3]):
+                    if c[2] == '<':
+                        if float(c[1]) < int(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if float(c[1]) > int(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if float(c[1]) == int(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if float(c[1]) != int(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if float(c[1]) <= int(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if float(c[1]) >= int(c[3]):
+                            run = True
+                elif isFloat(c[3]):
+                    if c[2] == '<':
+                        if float(c[1]) < float(c[3]):
+                            run = True
+                    if c[2] == '>':
+                        if float(c[1]) > float(c[3]):
+                            run = True
+                    if c[2] == '==':
+                        if float(c[1]) == float(c[3]):
+                            run = True
+                    if c[2] == '!=':
+                        if float(c[1]) != float(c[3]):
+                            run = True
+                    if c[2] == '<=':
+                        if float(c[1]) <= float(c[3]):
+                            run = True
+                    if c[2] == '>=':
+                        if float(c[1]) >= float(c[3]):
+                            run = True
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])):
+                        if c[2] == '<':
+                            if float(c[1]) < int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= int(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= int(isVarb(c[3])):
+                                run = True
+                    elif isFloat(isVarb(c[3])):
+                        if c[2] == '<':
+                            if float(c[1]) < float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= float(isVarb(c[3])):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= float(isVarb(c[3])):
+                                run = True
+                    else:
+                        print("E: can't compare float with string")
+                else:
+                    print("E: can't compare float with string")
+            elif isVarb(c[1]):
+                if isInt(isVarb(c[1])):
+                    if isInt(c[3]):
+                        if c[2] == '<':
+                            if int(isVarb(c[1])) < int(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if int(isVarb(c[1])) > int(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if int(isVarb(c[1])) == int(c[3]): 
+                                run = True
+                        if c[2] == '!=':
+                            if int(isVarb(c[1])) != int(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if int(isVarb(c[1])) <= int(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if int(isVarb(c[1])) >= int(c[3]):
+                                run = True
+                    elif isFloat(c[3]):
+                        if c[2] == '<':
+                            if int(isVarb(c[1])) < float(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if int(isVarb(c[1])) > float(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if int(isVarb(c[1])) == float(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if int(isVarb(c[1])) != float(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if int(isVarb(c[1])) <= float(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if int(isVarb(c[1])) >= float(c[3]):
+                                run = True
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])):
+                            if c[2] == '<':
+                                if int(isVarb(c[1])) < int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>':
+                                if int(isVarb(c[1])) > int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '==':
+                                if int(isVarb(c[1])) == int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '!=':
+                                if int(isVarb(c[1])) != int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '<=':
+                                if int(isVarb(c[1])) <= int(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>=':
+                                if int(isVarb(c[1])) >= int(isVarb(c[3])):
+                                    run = True
+                        elif isFloat(isVarb(c[3])):
+                            if c[2] == '<':
+                                if int(isVarb(c[1])) < float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>':
+                                if int(isVarb(c[1])) > float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '==':
+                                if int(isVarb(c[1])) == float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '!=':
+                                if int(isVarb(c[1])) != float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '<=':
+                                if int(isVarb(c[1])) <= float(isVarb(c[3])):
+                                    run = True
+                            if c[2] == '>=':
+                                if int(isVarb(c[1])) >= float(isVarb(c[3])):
+                                    run = True
+                        else:
+                            print("E: can't compare int with string")
+                    else:
+                        print("E: can't compare int with string")
+                elif isFloat(isVarb(c[1])):
+                    if isInt(c[3]):
+                        if c[2] == '<':
+                            if float(c[1]) < int(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > int(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == int(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != int(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= int(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= int(c[3]):
+                                run = True
+                    elif isFloat(c[3]):
+                        if c[2] == '<':
+                            if float(c[1]) < float(c[3]):
+                                run = True
+                        if c[2] == '>':
+                            if float(c[1]) > float(c[3]):
+                                run = True
+                        if c[2] == '==':
+                            if float(c[1]) == float(c[3]):
+                                run = True
+                        if c[2] == '!=':
+                            if float(c[1]) != float(c[3]):
+                                run = True
+                        if c[2] == '<=':
+                            if float(c[1]) <= float(c[3]):
+                                run = True
+                        if c[2] == '>=':
+                            if float(c[1]) >= float(c[3]):
+                                run = True
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])):
+                            if c[2] == '<':
+                                if float(c[1]) < int(c[3]):
+                                    run = True
+                            if c[2] == '>':
+                                if float(c[1]) > int(c[3]):
+                                    run = True
+                            if c[2] == '==':
+                                if float(c[1]) == int(c[3]):
+                                    run = True
+                            if c[2] == '!=':
+                                if float(c[1]) != int(c[3]):
+                                    run = True
+                            if c[2] == '<=':
+                                if float(c[1]) <= int(c[3]):
+                                    run = True
+                            if c[2] == '>=':
+                                if float(c[1]) >= int(c[3]):
+                                    run = True
+                        elif isFloat(isVarb(c[3])):
+                            if c[2] == '<':
+                                if float(c[1]) < float(c[3]):
+                                    run = True
+                            if c[2] == '>':
+                                if float(c[1]) > float(c[3]):
+                                    run = True
+                            if c[2] == '==':
+                                if float(c[1]) == float(c[3]):
+                                    run = True
+                            if c[2] == '!=':
+                                if float(c[1]) != float(c[3]):
+                                    run = True
+                            if c[2] == '<=':
+                                if float(c[1]) <= float(c[3]):
+                                    run = True
+                            if c[2] == '>=':
+                                if float(c[1]) >= float(c[3]):
+                                    run = True
+                        else:
+                            print("E: can't compare float with string")
+                    else:
+                        print("E: can't compare float with string")
+                else:
+                    x = isVarb(c[1])
+                    if isInt(c[3]) or isInt(c[3]):
+                        print("E: can't compare string with int/float")
+                    elif isVarb(c[3]):
+                        if isInt(isVarb(c[3])) or isInt(isVarb(c[3])):
+                            print("E: can't compare string with int/float")
+                        else:
+                            y = isVarb(c[3])
+                            if c[2] == '==':
+                                if x == y:
+                                    run = True
+                            if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                            if c[2] == '<':
+                                if x < y:
+                                    run = True
+                            if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                            if c[2] == '>':
+                                if x > y:
+                                    run = True
+                            if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+                    else:
+                        y = isVarb(c[3])
+                        if c[2] == '==':
+                                if x == y:
+                                    run = True
+                        if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                        if c[2] == '<':
+                                if x < y:
+                                    run = True
+                        if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                        if c[2] == '>':
+                                if x > y:
+                                    run = True
+                        if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+            else:
+                if isInt(c[3]) or isInt(c[3]):
+                    print("E: can't compare string with int/float")
+                elif isVarb(c[3]):
+                    if isInt(isVarb(c[3])) or isInt(isVarb(c[3])):
+                        print("E: can't compare string with int/float")
+                    else:
+                        y = isVarb(c[3])
+                        if c[2] == '==':
+                                if x == y:
+                                    run = True
+                        if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                        if c[2] == '<':
+                                if x < y:
+                                    run = True
+                        if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                        if c[2] == '>':
+                                if x > y:
+                                    run = True
+                        if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+                else:
+                    y = isVarb(c[3])
+                    if c[2] == '==':
+                                if x == y:
+                                    run = True
+                    if c[2] == '!=':
+                                if x != y:
+                                    run = True
+                    if c[2] == '<':
+                                if x < y:
+                                    run = True
+                    if c[2] == '<=':
+                                if x <= y:
+                                    run = True
+                    if c[2] == '>':
+                                if x > y:
+                                    run = True
+                    if c[2] == '>=':
+                                if x >= y:
+                                    run = True
+        #breakpoint()
+        if script_run:
+            if run:
+                return
+            else:
+                for ij in range(rip, len(commands)):
+                    if commands[ij] == 'done':
+                        rip += ij
+                        return
+        w_l = [' '.join(c)]
+        while True:
+            x = input('> ')
+            if x == 'done':
+                break
+            if x:
+                w_l.append(x)
+        if run:
+            script_run = True
+            for k in w_l:
+                commands.append(k)
+            commands.append('done')
+        else:
+            return
+    else:
+        print("E: incorrect syntax")
+
         
             
 
@@ -2507,34 +3589,54 @@ user = un
 if access:
 
     login(user)
+
+    #breakpoint()
     
     while True:
-        get_alias()
+        #breakpoint()
+        get_alias() 
         cur_d = '/' + '/'.join(os.getcwd().split('\\')[5:])
         if script_run:
             if commands:
-                c = commands[0]
-                del commands[0]
-                if not commands:
-                    script_run =False
-        elif not cd:
+                if rip < len(commands):
+                    c = commands[rip].split(' ')
+                    rip += 1
+                else:
+                    commands = []
+                    rip = 0
+                    script_run = False
+                    run_now = True
+        elif not cd or run_now:
             c = input("{}@{}[{}]{} ".format(getHostname(), user.upper(), pd(cur_d, user), '#' if user == 'core' else '$')).split()
         else:
             c = cv
             cd = False
             cv = ''
+        if run_now:
+            c = input("{}@{}[{}]{} ".format(getHostname(), user.upper(), pd(cur_d, user), '#' if user == 'core' else '$')).split()
+            run_now = False
         if len(c) == 0:
             continue
 
-        elif c[0].startswith('./'):
-            for i in os.listdir():
-                if i.endswith(c[0][2:]):
-                    if is_authorized_x(c[0][2:]):
-                        script_run = True
-                        with open(i, 'r') as f:
-                            for i in f.readlines():
-                                commands.append(i.strip('\n').split(' '))
-                    break
+        elif c[0] == 'fi':
+            continue
+
+        elif c[0] == 'else':
+            if else_stat:
+                else_stat = False
+                continue
+            else:
+                for ij in range(rip, len(commands)):
+                    if commands[ij] == 'fi':
+                        rip += ij
+                        break
+
+        elif c[0] == 'done':
+            rip = while_rip
+
+        elif c[0].startswith('#'):
+            continue
+
 
         elif c[0] in alias:
             cd = True
@@ -2578,8 +3680,8 @@ if access:
                                 cv = c[1:]
                                 cudo_ = True
                             else:
-                                print("Error: You are not in the cudoers list")
-                                addLog(user, dt(), 'cudo', "Error: You are not in the cudoers list")
+                                print("Error: You are not authorized to use cudo on {}".format(getHostname()))
+                                addLog(user, dt(), 'cudo', "Error: You are not authorized to use cudo on {}".format(getHostname()))
                     else:
                         cd = True
                         cv = c[1:]
@@ -2804,13 +3906,20 @@ if access:
                     fn = get_file_name(c[1])
                     with open(fn, 'r') as f:
                         for i in f.readlines():
-                            commands.append(i.strip('\n').split(' '))
+                            commands.append(i.strip('\n'))
 
         elif c[0] == 'se':
             if len(c) != 2:
                 print("Usage: se <filename>")
             else:
                 editor(c)
+
+        elif c[0] == 'if':
+            ifstat(c)
+
+
+        elif c[0] == 'while':
+            whileloop(c)
                 
             
         elif c[0] == 'exit':
