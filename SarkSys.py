@@ -339,6 +339,8 @@ def su(c, user):
                 print("Error: Incorrect credentials")
                 addLog(user, dt(), "su", "Error: Incorrect credentials")
                 is_su = True
+                if is_sudo:
+                    return cur_user
                 return user
         else:
             if userExists(c[1]):
@@ -372,11 +374,15 @@ def su(c, user):
                     print("Error: Incorrect credentials")
                     addLog(user, dt(), 'su', "Error: Incorrect credentials")
                     is_su = True
+                    if is_sudo:
+                        return cur_user
                     return user
             else:
                 print("Error: No such user exists")
                 addLog(user, dt(), 'su', "Error: No such user exists")
                 is_su = True
+                if is_sudo:
+                    return cur_user
                 return user
 
 def useradd(usr):
@@ -3505,10 +3511,10 @@ def sudo(c):
     global cd
     global cv
     global is_auth
-    authenticated = False
+    #breakpoint()
     if user != 'core':
         if not is_auth:
-            pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+            pw = enc(str(getpass.getpass("[sudo] PassWord for {} -> ".format(user))))
             cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
             if cur.fetchone():
                 authenticated = True
@@ -3523,7 +3529,10 @@ def sudo(c):
             if can:
                 is_sudo = True
                 cd = True
-                cv = c[1:]
+                if len(c) >= 2 and c[1] == '-u':
+                    cv = c[3:]
+                else:
+                    cv = c[1:]
                 cur_user = user
                 user = msg
                 is_auth = True
@@ -3532,12 +3541,16 @@ def sudo(c):
     else:
         is_sudo = True
         cd = True
-        cv = c[1:]
+        if len(c) >= 2 and c[1] == '-u':
+            cv = c[3:]
+        else:
+            cv = c[1:]
 
 def can_use_sudo(con, c):
     user_present = False
     su_users = ''
     su_cmds = ''
+    #breakpoint()
     for i in con:
         if i.split(' ')[0] == user:
             user_present = True
@@ -3582,6 +3595,8 @@ def can_use_sudo(con, c):
             if len(c) >= 3 and c[1] == '-u':
                 if c[2] in su_users.split(','):
                     if su_cmds.upper() == 'ALL':
+                        if len(c) == 3:
+                            return (False, "Info: No command specified")
                         if len(c) >= 3 and c[1] == '-u':
                             return (True, c[2])
                         return (True, 'core')
