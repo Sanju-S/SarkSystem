@@ -49,6 +49,8 @@ g_alias = {}
 run_now = False
 else_stat = False
 while_loop = 0
+is_sudo = False
+cur_user = ''
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -1528,6 +1530,7 @@ def cat (c):
 
 def grouprem(c):
     global cudo_
+    #breakpoint()
     if user == 'core' or cudo_:
         for i in c[1:-1]:
             if i.startswith('$'):
@@ -1542,7 +1545,7 @@ def grouprem(c):
                 continue
             cur.execute("SELECT grps FROM grp WHERE uname='{}'".format(i))
             g = cur.fetchone()[0]
-            g = g.replace(c[1]+'-', '')
+            g = g.replace(c[2]+'-', '')
             cur.execute("UPDATE grp SET grps='{}' WHERE uname='{}'".format(g, i))
             conn.commit()
     else:
@@ -3476,7 +3479,144 @@ def whileloop(c):
     else:
         print("E: incorrect syntax")
 
-        
+
+def sudo(c):
+    global user
+    global cur_user
+    global is_sudo
+    global cd
+    global cv
+    if user != 'core':
+        pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+        cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+        if cur.fetchone():
+            fn = get_f_name('/etc/sudoers')
+            with open(fn, 'r') as f:
+                contents = f.read().splitlines()
+            can, msg = can_use_sudo(contents, c)
+            #breakpoint()
+            if can:
+                is_sudo = True
+                cd = True
+                cv = c[1:]
+                cur_user = user
+                user = msg
+            else:
+                print(msg)
+    else:
+        is_sudo = True
+        cd = True
+        cv = c[1:]
+
+def can_use_sudo(con, c):
+    user_present = False
+    su_users = ''
+    su_cmds = ''
+    for i in con:
+        if i.split(' ')[0] == user:
+            user_present = True
+            su_users, su_cmds = i.split(' ')[1].split(':')
+            break
+    if len(c) >= 2:
+        if c[1].startswith('-'):
+            if c[1] not in ['-u']:
+                return (False, "Error: parameter '{}' not recognozed".format(c[1]))
+    if len(c) >=2 and c[1] == '-u':
+        if len(c) < 3:
+            return (False, "Error: Please specify a user")
+        cur.execute("SELECT * FROM usr WHERE uname='{}'".format(c[2]))
+        if not cur.fetchall():
+            return (False,"Error: No such user {} in the system".format(c[2]))
+    if user_present:
+        if su_users.upper() == 'ALL':
+            if su_cmds.upper() == 'ALL':
+                if len(c) >= 3 and c[1] == '-u':
+                    if len(c) == 3:
+                        return (False,"Info: No command specified")
+                    return (True, c[2])
+                if len(c) == 1:
+                    return (False,"Info: No command specified")
+                return (True, 'core')
+            else:
+                if len(c) >= 3 and c[1] == '-u':
+                    if len(c) >= 3 and c[3] in su_cmds.split(','):
+                        if len(c) >= 3 and c[1] == '-u':
+                            return (True, c[2])
+                        return (True, 'core')
+                    else:
+                        return (False, "Error: You are not authorized to use {} as sudo on {}".format(c[3], getHostname()))
+                else:
+                    if len(c) >= 3 and c[1] in su_cmds.split(','):
+                        if len(c) >= 3 and c[1] == '-u':
+                            return (True, c[2])
+                        return (True, 'core')
+                    else:
+                        return (False, "Error: You are not authorized to use {} as sudo on {}".format(c[3], getHostname()))
+        else:
+            if len(c) >= 3 and c[1] == '-u':
+                if c[2] in su_users.split(','):
+                    if su_cmds.upper() == 'ALL':
+                        if len(c) >= 3 and c[1] == '-u':
+                            return (True, c[2])
+                        return (True, 'core')
+                    else:
+                        if c[1] == '-u':
+                            if len(c) >= 4 and c[3] in su_cmds.split(','):
+                                if len(c) >= 3 and c[1] == '-u':
+                                    return (True, c[2])
+                                return (True, 'core')
+                            elif len(c) == 3:
+                                return (False, "Info: No command specified")
+                            else:
+                                return (False, "Error: You are not authorized to use {} on {}".format(c[3], getHostname()))
+                        else:
+                            if len(c) >= 3 and c[1] in su_cmds.split(','):
+                                if len(c) >= 3 and c[1] == '-u':
+                                    return (True, c[2])
+                                return (True, 'core')
+                            elif len(c) == 3:
+                                return (False, "Info: No command specified")
+                            else:
+                                return (False, "Error: You are not authorized to use {} on {}".format(c[3], getHostname()))
+                else:
+                    return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[2], getHostname()))
+            else:
+                if 'core' in su_users.split(','):
+                    if su_cmds.upper() == 'ALL':
+                        return (True, '')
+                    else:
+                        if len(c) >= 4 and c[1] == '-u':
+                            if c[3] in su_cmds.split(','):
+                                if len(c) >= 3 and c[1] == '-u':
+                                    return (True, c[1])
+                                return (True, 'core')
+                            else:
+                                return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[3], getHostname()))
+                        else:
+                            if len(c) >= 3 and c[1] in su_cmds.split(','):
+                                if len(c) >= 3 and c[1] == '-u':
+                                    return (True, c[1])
+                                return (True, 'core')
+                            else:
+                                return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[3], getHostname()))
+                else:
+                    return (False, "Erro: You are not authorized to run sudo as core on {}".format(getHostname()))
+    else:
+        return (False, "Error: You are not authorized to use sudo on {}".format(getHostname()))
+    
+
+def get_f_name(f):
+    #breakpoint()
+    base = 'C:/Users/sanjsark/SarkSys/0-ss'
+    fp = f.split('/')[1:]
+    for pfn in fp:
+        for fpe in os.listdir(base):
+            if fpe.split('-')[-1] == pfn:
+                if os.path.isfile(base+'/'+fpe):
+                    return base+'/'+fpe
+                elif os.path.isdir(base+'/'+fpe):
+                    base = base+'/'+fpe
+    
             
 
 
@@ -3660,6 +3800,10 @@ if access:
             else:
                 useradd(c[1])
 
+        elif c[0] == 'sudo':
+            sudo(c)
+            continue        
+
         elif c[0] == 'cudo':
             if len(c) ==  1:
                 print("Usage: cudo [command]")
@@ -3823,7 +3967,7 @@ if access:
 
         elif c[0] == 'grouprem':
             if len(c) < 3:
-                print("Usage: groupadd [uname1, [uname2,[,]]] [groupname]")
+                print("Usage: grouprem [uname1, [uname2,[,]]] [groupname]")
             else:
                 grouprem(c)
 
@@ -3933,3 +4077,6 @@ if access:
                 var(c)
             else:
                 print(c[0], ": no such command")
+        if is_sudo:
+            is_sudo = False
+            user = cur_user
