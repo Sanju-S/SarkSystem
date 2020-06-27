@@ -2533,12 +2533,13 @@ def ip(c):
 
 def get_alias():
     global g_alias
+    global home
     for i in os.listdir(home):
         if i.endswith('.ss_alias') and os.path.isfile(i):
             try:
-                with open(i, 'r') as f:
+                with open(home+'/'+i, 'r') as f:
                     for i in f.readlines():
-                        g_alias[i.split('=')[0]] = i.split('=')[1].strip('\n')
+                        g_alias[i.split('=')[0].replace(' ','')] = i.split('=')[1].strip('\n').replace(' ','')
             except:
                 pass
 
@@ -3844,7 +3845,7 @@ if access:
                         print("User {} can run following commands on {}".format(user, getHostname()))
                         print(lne)
                     else:
-                        print("User {} cannot run sudo on {}".format(getHostname()))
+                        print("User {} cannot run sudo on {}".format(user, getHostname()))
             else:
                 sudo(c)
                 continue        
