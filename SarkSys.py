@@ -51,6 +51,7 @@ else_stat = False
 while_loop = 0
 is_sudo = False
 cur_user = ''
+is_su = False
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -289,8 +290,11 @@ def su(c, user):
     global variables
     global alias
     global g_alias
+    global is_su
+    #breakpoint()
     if user == 'core':
         if len(c) == 1:
+            is_su = True
             return 'core'
         else:
             if userExists(c[1]):
@@ -306,10 +310,12 @@ def su(c, user):
                 variables = {}
                 alias = {}
                 g_alias = {}
+                is_su = True
                 return c[1]
             else:
                 print("Error: No suh user exists")
                 addLog(user, dt(), "su","Error: No suh user exists")
+                is_su = True
                 return 'core'
     else:
         if len(c) == 1:
@@ -327,10 +333,12 @@ def su(c, user):
                 variables = {}
                 alias = {}
                 g_alias = {}
+                is_su = True
                 return 'core'
             else:
                 print("Error: Incorrect credentials")
                 addLog(user, dt(), "su", "Error: Incorrect credentials")
+                is_su = True
                 return user
         else:
             if userExists(c[1]):
@@ -350,6 +358,7 @@ def su(c, user):
                         variables = {}
                         alias = {}
                         g_alias = {}
+                        is_su = True
                         return 'core'
                     for i in os.listdir('C:/Users/sanjsark/SarkSys/0-ss/2-home'):
                         if i.endswith(c[1]):
@@ -357,14 +366,17 @@ def su(c, user):
                     #os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1]))
                     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1])
                     variables = {}
+                    is_su = True
                     return c[1]
                 else:
                     print("Error: Incorrect credentials")
                     addLog(user, dt(), 'su', "Error: Incorrect credentials")
+                    is_su = True
                     return user
             else:
                 print("Error: No such user exists")
                 addLog(user, dt(), 'su', "Error: No such user exists")
+                is_su = True
                 return user
 
 def useradd(usr):
@@ -507,14 +519,14 @@ def culist():
 
 def passwd(c):
     global cudo_
-    if user == 'core' or cudo_:
+    if user == 'core':
         if len(c) == 1:
             if live:
-                np = getpass.getpass("New PassWord -> ")
-                cp = getpass.getpas("Confirm New PassWord -> ")
+                np = getpass.getpass("[passwd] New PassWord -> ")
+                cp = getpass.getpass("[passwd] Confirm New PassWord -> ")
             else:
-                np = input("New PassWord -> ")
-                cp = input("Confirm New PassWord -> ")
+                np = input("[passwd] New PassWord -> ")
+                cp = input("[passwd] Confirm New PassWord -> ")
             if np == cp:
                 pw = enc(str(np))
                 cur.execute("UPDATE usr SET passwd='{}' WHERE uname='{}'".format(pw, user))
@@ -526,11 +538,11 @@ def passwd(c):
         else:
             if user == 'core' or c[1] != 'core':
                 if live:
-                    np = input("New PassWord -> ")
-                    cp = input("Confirm New PassWord -> ")
+                    np = getpass.getpass("[passwd] New PassWord -> ")
+                    cp = getpass.getpass("[passwd] Confirm New PassWord -> ")
                 else:
-                    np = input("New PassWord -> ")
-                    cp = input("Confirm New PassWord -> ")
+                    np = input("[passwd] New PassWord -> ")
+                    cp = input("[passwd] Confirm New PassWord -> ")
                 if np == cp:
                     pw = enc(str(np))
                     cur.execute("UPDATE usr SET passwd='{}' WHERE uname='{}'".format(pw, c[1]))
@@ -545,8 +557,13 @@ def passwd(c):
         cudo_ = False
     else:
         if len(c) == 1:
-            np = input("New PassWord -> ")
-            cp = input("Confirm New PassWord -> ")
+            pw = enc(str(getpass.getpass("[passwd] PassWord for {} -> ".format(user))))
+            cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+            if not cur.fetchone():
+                print("Error: incorrect password")
+                return
+            np = getpass.getpass("[passwd] New PassWord -> ")
+            cp = getpass.getpass("[passwd] Confirm New PassWord -> ")
             if np == cp:
                 pw = enc(str(np))
                 cur.execute("UPDATE usr SET passwd='{}' WHERE uname='{}'".format(pw, user))
@@ -557,8 +574,8 @@ def passwd(c):
                 addLog(user, dt(), 'passwd', "Error: PassWords dont match")
         else:
             if c[1] == user:
-                np = input("New PassWord -> ")
-                cp = input("Confirm New PassWord -> ")
+                np = getpass.getpass("[passwd] New PassWord -> ")
+                cp = getpass.getpass("[passwd] Confirm New PassWord -> ")
                 if np == cp:
                     pw = enc(str(np))
                     cur.execute("UPDATE usr SET passwd='{}' WHERE uname='{}'".format(pw, user))
@@ -3486,10 +3503,17 @@ def sudo(c):
     global is_sudo
     global cd
     global cv
+    global is_auth
+    authenticated = False
     if user != 'core':
-        pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
-        cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
-        if cur.fetchone():
+        if not is_auth:
+            pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+            cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+            if cur.fetchone():
+                authenticated = True
+        else:
+            authenticated = True
+        if authenticated:
             fn = get_f_name('/etc/sudoers')
             with open(fn, 'r') as f:
                 contents = f.read().splitlines()
@@ -3501,6 +3525,7 @@ def sudo(c):
                 cv = c[1:]
                 cur_user = user
                 user = msg
+                is_auth = True
             else:
                 print(msg)
     else:
@@ -3546,12 +3571,12 @@ def can_use_sudo(con, c):
                     else:
                         return (False, "Error: You are not authorized to use {} as sudo on {}".format(c[3], getHostname()))
                 else:
-                    if len(c) >= 3 and c[1] in su_cmds.split(','):
+                    if len(c) >= 2 and c[1] in su_cmds.split(','):
                         if len(c) >= 3 and c[1] == '-u':
                             return (True, c[2])
                         return (True, 'core')
                     else:
-                        return (False, "Error: You are not authorized to use {} as sudo on {}".format(c[3], getHostname()))
+                        return (False, "Error: You are not authorized to use {} as core on {}".format(c[1], getHostname()))
         else:
             if len(c) >= 3 and c[1] == '-u':
                 if c[2] in su_users.split(','):
@@ -3670,6 +3695,9 @@ if first_try:
     cur.execute("INSERT INTO inode VALUES(7, 'hostname', 'core', 'core', '766')")
     with open('C:/Users/sanjsark/SarkSys/0-ss/5-etc/9-host/7-hostname', 'w') as f:
         f.write('SarkSys')
+    cur.execute("INSERT INTO inode VALUES(10, 'sudoers', 'core', 'sudoers', '640')")
+    with open('C:/Users/sanjsark/SarkSys/0-ss/5-etc/10-sudoers', 'w') as f:
+        f.write('{} ALL:ALL'.format(un))
     login(un)
     conn.commit()
     access = True
@@ -3801,10 +3829,29 @@ if access:
                 useradd(c[1])
 
         elif c[0] == 'sudo':
-            sudo(c)
-            continue        
+            if len(c) >= 2 and c[1] == '-l':
+                pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+                cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+                if cur.fetchone():
+                    lne = ''
+                    filename = get_f_name('/etc/sudoers')
+                    with open(filename, 'r') as f:
+                        cont = f.read().splitlines()
+                    for i in cont:
+                        if i.split(' ')[0] == user:
+                            lne = i
+                    if lne:
+                        print("User {} can run following commands on {}".format(user, getHostname()))
+                        print(lne)
+                    else:
+                        print("User {} cannot run sudo on {}".format(getHostname()))
+            else:
+                sudo(c)
+                continue        
 
         elif c[0] == 'cudo':
+            print("Info: 'codo' has been deprecated, please user 'sudo'")
+            continue
             if len(c) ==  1:
                 print("Usage: cudo [command]")
             else:
@@ -4079,4 +4126,7 @@ if access:
                 print(c[0], ": no such command")
         if is_sudo:
             is_sudo = False
+            if is_su:
+                is_su = False
+                continue
             user = cur_user
