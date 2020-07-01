@@ -16,7 +16,6 @@ import re
 Table Name | Fields
 ----------------------------------------
 usr	   | uname, passwd
-cudoers	   | un
 logs	   | log
 login	   | uname, time
 inode      | in, fn, ow, gr, perm
@@ -52,6 +51,8 @@ while_loop = 0
 is_sudo = False
 cur_user = ''
 is_su = False
+sigint = False
+script_parameters = {}
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -127,6 +128,15 @@ def pd(d, user):
     else:
         if re.search('/2-home/.*{}$'.format(user), d):
             return '~'
+        if re.search('/2-home/.*{}*'.format(user), d):
+            home_dir = d.replace(re.search('/2-home/.*{}*'.format(user), d)[0], '~')
+            l = []
+            for i in home_dir[2:].split('/'):
+                try:
+                    l.append(i.split('-')[1])
+                except:
+                    pass
+            return '~/'+'/'.join(l)
         l = []
         for i in d.split('/'):
             try:
@@ -216,7 +226,7 @@ def isGroup(j):
     return g in l
 
 def fixUser():
-    with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'r') as f:
+    with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'r') as f:
         return f.readline().strip('\n')
 
 def coreLogin():
@@ -925,7 +935,7 @@ def touch(c):
         found = False
         if '-' in i:
             print("E: " + i + ": filename cannot contain '-'.")
-            continue
+            continue1
         if i.startswith('/'):
             print("E: cannot create file using absolute path")
             continue
@@ -1392,6 +1402,7 @@ def chmod(c):
             cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format(c[1], int(i.split('-')[0])))
             conn.commit()
     else:
+        found = False
         for i in c[2:]:
             if i.startswith('$'):
                 if i[1:] in variables:
@@ -1400,7 +1411,8 @@ def chmod(c):
                     print("E: {}: no such variable".format(i))
                     continue
             for j in os.listdir():
-                if j.endswith(i):
+                if j.split('-')[1] == i:
+                    found = True
                     cur.execute("SELECT ow FROM inode WHERE ind={}".format(int(j.split('-')[0])))
                     vl = cur.fetchone()[0]
                     if user == 'core':
@@ -1413,6 +1425,7 @@ def chmod(c):
                         continue
                     cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format(c[1], int(j.split('-')[0])))
                     conn.commit()
+            print("E: file {} not found".format(i))
 
 def dmask(c):
     global cudo_
@@ -1514,8 +1527,48 @@ def cat (c):
                 else:
                     print("E: {}: no such variable".format(i))
                     continue
+
+        if i.startswith('/'):
+            can, msg = get_f_name_user(i)
+            if can:
+                found = True
+                j = msg.split('/')[-1]
+                p = getPerms(j)[0]
+                if user == findOwner(j) or user == 'core':
+                    if p[0] == 'r':
+                        with open(get_f_name(i), 'r') as f:
+                            for i in f.readlines():
+                                if i.endswith('\n'):
+                                    print(i, end='')
+                                else:
+                                    print(i)
+                    else:
+                        print("E: " + i + " - Permission denied")
+                elif isGroup(j):
+                    if p[3] == 'r':
+                        with open(get_f_name(i), 'r') as f:
+                            for i in f.readlines():
+                                if i.endswith('\n'):
+                                    print(i, end='')
+                                else:
+                                    print(i)
+                    else:
+                        print("E: " + i + " - Permission denied")
+                else:
+                    if p[6] == 'r':
+                        with open(get_f_name(i), 'r') as f:
+                            for i in f.readlines():
+                                if i.endswith('\n'):
+                                    print(i, end='')
+                                else:
+                                    print(i)
+                    else:
+                        print("E: " + i + " - Permission denied")
+            else:
+                print(msg)
+                continue
         for j in os.listdir():
-            if j.endswith(i):
+            if j.split('-')[1] == i:
                 found = True
                 p = getPerms(j)[0]
                 if user == findOwner(j) or user == 'core':
@@ -1593,14 +1646,14 @@ def inlog(c):
             if not cur.fetchone():
                 print("E: " + c[1] + " - no such user")
                 return
-            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'r') as f:
+            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'r') as f:
                 r = f.readline()
             if r:
                 print("User: " + r + ", already exist in initial login, do you want to overwrite it? (Y/n): ")
                 if not input('-> ').lower().startswith('y'):
                     print('Info: action aborted')
                     return
-            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'w') as f:
+            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'w') as f:
                 f.write(c[1])
             cudo_ = False
         else:
@@ -2186,7 +2239,7 @@ def is_authorized_w(f):
 
 def get_file_name(f):
     for i in os.listdir():
-        if i.endswith(f) and os.path.isfile(i):
+        if i.split('-')[1] == f and os.path.isfile(i):
             return i
 
 def save(fn, lines):
@@ -2199,7 +2252,7 @@ def save(fn, lines):
 
 def isFile(f):
     for i in os.listdir():
-        if i.endswith(f) and os.path.isfile(i):
+        if i.split('-')[1] == f and os.path.isfile(i):
             return True
     touch(c)
     return True
@@ -2952,7 +3005,7 @@ def ifstat(c):
                                 if x >= y:
                                     run = True
             else:
-                breakpoint()
+                #breakpoint()
                 if isInt(c[3]) or isInt(c[3]):
                     print("E: can't compare string with int/float")
                 elif isVarb(c[3]):
@@ -3657,6 +3710,32 @@ def get_f_name(f):
                     return base+'/'+fpe
                 elif os.path.isdir(base+'/'+fpe):
                     base = base+'/'+fpe
+
+def get_f_name_user(f):
+    base = 'C:/Users/sanjsark/SarkSys/0-ss'
+    fp = f.split('/')[1:]
+    for pfn in fp:
+        for fpe in os.listdir(base):
+            if fpe.split('-')[-1] == pfn:
+                if os.path.isfile(base+'/'+fpe):
+                    return (True, base+'/'+fpe)
+                elif os.path.isdir(base+'/'+fpe):
+                    p = getPerms(fpe)[0]
+                    if user == findOwner(fpe) or user == 'core':
+                        if p[2] == 'x':
+                            base = base+'/'+fpe
+                        else:
+                            return(False, "E: d:" + fpe.split('-')[1] + " - Permission denied")
+                    elif isGroup(fpe):
+                        if p[5] == 'x':
+                            base = base+'/'+fpe
+                        else:
+                            return(False, "E: d:" + fpe.split('-')[1] + " - Permission denied")
+                    else:
+                        if p[8] == 'x':
+                            base = base+'/'+fpe
+                        else:
+                            return(False, "E: d:" + fpe.split('-')[1] + " - Permission denied")
     
             
 
@@ -3679,7 +3758,7 @@ if first_try:
     else:
         pw = str(input("Enter PassWord -> "))
     cur.execute("CREATE TABLE usr (uname VARCHAR(20), passwd VARCHAR(20));")
-    cur.execute("CREATE TABLE cudoers (un VARCHAR(20));")
+    #cur.execute("CREATE TABLE cudoers (un VARCHAR(20));")
     cur.execute("CREATE TABLE logs (log VARCHAR(20));")
     cur.execute("CREATE TABLE inode (ind INTEGER(10), fn VARCHAR(20), ow VARCHAR(20), gr VARCHAR(20), perm VARCHAR(5))")
     cur.execute("CREATE TABLE dmask (dmask INTEGER(5))")
@@ -3693,7 +3772,7 @@ if first_try:
     cur.execute("INSERT INTO usr VALUES ('{}', '{}')".format(un, enc(pw)))
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un))
     os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un))
-    cur.execute("INSERT INTO cudoers VALUES ('{}')".format(un))
+    #cur.execute("INSERT INTO cudoers VALUES ('{}')".format(un))
     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un)
     cur.execute("INSERT INTO inode VALUES(0, 'ss', 'core', 'core', '754')")
     cur.execute("INSERT INTO inode VALUES(1, 'core', 'core', 'core', '750')")
@@ -3705,8 +3784,8 @@ if first_try:
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/5-etc')
     cur.execute("INSERT INTO inode VALUES(9, 'host', 'core', 'core', '777')")
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/5-etc/9-host')
-    cur.execute("INSERT INTO inode VALUES(6, 'login', 'core', 'core', '754')")
-    with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'w') as f:
+    cur.execute("INSERT INTO inode VALUES(6, 'login', 'core', 'core', '664')")
+    with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'w') as f:
         pass
     cur.execute("INSERT INTO inode VALUES(7, 'hostname', 'core', 'core', '766')")
     with open('C:/Users/sanjsark/SarkSys/0-ss/5-etc/9-host/7-hostname', 'w') as f:
@@ -3784,12 +3863,17 @@ if access:
             if commands:
                 if rip < len(commands):
                     c = commands[rip].split(' ')
+                    for ep, par in enumerate(c):
+                        if par.startswith('@'):
+                            if par in script_parameters:
+                                c[ep] = script_parameters[par]
                     rip += 1
                 else:
                     commands = []
                     rip = 0
                     script_run = False
                     run_now = True
+                    script_parameters = {}
         elif not cd or run_now:
             c = input("{}@{}[{}]{} ".format(getHostname(), user.upper(), pd(cur_d, user), '#' if user == 'core' else '$')).split()
         else:
@@ -3799,6 +3883,11 @@ if access:
         if run_now:
             c = input("{}@{}[{}]{} ".format(getHostname(), user.upper(), pd(cur_d, user), '#' if user == 'core' else '$')).split()
             run_now = False
+
+        if '#' in c:
+            index_of_hash = c.index('#')
+            c = c[:index_of_hash]
+            
         if len(c) == 0:
             continue
 
@@ -3846,9 +3935,12 @@ if access:
 
         elif c[0] == 'sudo':
             if len(c) >= 2 and c[1] == '-l':
-                pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
-                cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
-                if cur.fetchone():
+                if not is_auth:
+                    pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+                    cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+                    if cur.fetchone():
+                        is_auth = True
+                if is_auth:
                     lne = ''
                     filename = get_f_name('/etc/sudoers')
                     with open(filename, 'r') as f:
@@ -3866,7 +3958,7 @@ if access:
                 continue        
 
         elif c[0] == 'cudo':
-            print("Info: 'codo' has been deprecated, please user 'sudo'")
+            print("Info: 'cudo' has been deprecated, please use 'sudo'")
             continue
             if len(c) ==  1:
                 print("Usage: cudo [command]")
@@ -4063,7 +4155,7 @@ if access:
                     print('{}: {}'.format(k, v))
             else:
                 ph = ' '.join(c[1:])
-                alias[ph.split('=')[0]] = ph.split('=')[1]
+                alias[ph.split('=')[0].replace(' ','')] = ph.split('=')[1].replace(' ','')
 
         elif c[0] == 'unalias':
             if len(c) < 2:
@@ -4105,9 +4197,12 @@ if access:
                 read(c)
 
         elif c[0] == 'ss':
-            if len(c) != 2:
+            if len(c) < 2:
                 print("Usage: ss <filename>")
             else:
+                if len(c) > 2:
+                    for e, param in enumerate(c[2:]):
+                        script_parameters['@{}'.format(e+1)] = param
                 if is_authorized_x(c[1]):
                     script_run = True
                     fn = get_file_name(c[1])
@@ -4140,6 +4235,7 @@ if access:
                 var(c)
             else:
                 print(c[0], ": no such command")
+                
         if is_sudo:
             is_sudo = False
             if is_su:
