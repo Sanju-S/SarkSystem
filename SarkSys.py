@@ -53,6 +53,8 @@ cur_user = ''
 is_su = False
 sigint = False
 script_parameters = {}
+old_pwd = ''
+user_env_var = {}
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -94,12 +96,15 @@ def dt():
     return str(datetime.now())[:19]
 
 def login(usr):
+    global user_env_var 
     cur.execute("SELECT * FROM login WHERE uname='{}'".format(usr))
     if cur.fetchone():
         cur.execute("UPDATE login SET time='{}' WHERE uname='{}'".format(dt(), usr))
     else:
         cur.execute("INSERT INTO login VALUES ('{}', '{}')".format(usr, dt()))
     conn.commit()
+    user_env_var['PATH'] = '/bin'
+    #check_ssrc(user)
 
 def llogin(usr):
     cur.execute("SELECT * FROM login WHERE uname='{}'".format(usr))
@@ -128,15 +133,6 @@ def pd(d, user):
     else:
         if re.search('/2-home/.*{}$'.format(user), d):
             return '~'
-        if re.search('/2-home/.*{}*'.format(user), d):
-            home_dir = d.replace(re.search('/2-home/.*{}*'.format(user), d)[0], '~')
-            l = []
-            for i in home_dir[2:].split('/'):
-                try:
-                    l.append(i.split('-')[1])
-                except:
-                    pass
-            return '~/'+'/'.join(l)
         l = []
         for i in d.split('/'):
             try:
@@ -445,7 +441,6 @@ def userdel(usr):
         cur.execute("SELECT * FROM usr WHERE uname='{}'".format(usr))
         if cur.fetchone():
             cur.execute("DELETE FROM usr WHERE uname='{}'".format(usr))
-            cleanUp(usr)
             conn.commit()
             for i in os.listdir('C:/Users/sanjsark/SarkSys/0-ss/2-home'):
                 if i.endswith(usr):
@@ -1425,7 +1420,8 @@ def chmod(c):
                         continue
                     cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format(c[1], int(j.split('-')[0])))
                     conn.commit()
-            print("E: file {} not found".format(i))
+            if not found:
+                print("E: file {} not found".format(i))
 
 def dmask(c):
     global cudo_
@@ -1635,7 +1631,7 @@ def inlog(c):
             if not os.path.isdir('C:/Users/sanjsark/SarkSys/0-ss/4-boot'):
                 os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/4-boot')
                 cur.execute("INSERT INTO inode VALUES(4, 'boot', 'core', 'core', '755')")
-            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'w') as f:
+            with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'w') as f:
                 pass
     else:
         if user == 'core' or cudo_:
@@ -2208,14 +2204,36 @@ def is_authorized_x(f):
                 if p[5] == 'x':
                     return True
                 else:
-                    print("E: " + i + ": Permission denied")
+                    print("E: " + f + ": Permission denied")
                     return False
             else:
                 if p[8] == 'x':
                     return True
                 else:
-                    print("E: " + i + ": Permission denied")
+                    print("E: " + f + ": Permission denied")
                     return False
+
+def is_auth_x(fn):
+    p = getPerms(fn)[0]
+    f = fn.split('-')[1]
+    if user == 'core' or user == findOwner(i):
+        if p[2] == 'x':
+            return True
+        else:
+            print("E: " + f + ": Permission denied")
+            return False
+    elif isGroup(i):
+        if p[5] == 'x':
+            return True
+        else:
+            print("E: " + f + ": Permission denied")
+            return False
+    else:
+        if p[8] == 'x':
+            return True
+        else:
+            print("E: " + f + ": Permission denied")
+            return False
 
 def is_authorized_w(f):
     for i in os.listdir():
@@ -2602,6 +2620,27 @@ def get_alias():
             except:
                 pass
 
+
+def check_ssrc(user):
+    global script_run
+    global commands
+    home = get_ssrc_fp(user)
+    if not home:
+        return
+    #breakpoint()
+    for i in os.listdir(home):
+        if i.split('-')[1] == '.ssrc' and os.path.isfile(home+'/'+i):
+            script_run = True
+            with open(home+'/'+i, 'r') as f:
+                for i in f.readlines():
+                    commands.append(i.strip('\n'))
+            break
+
+def get_ssrc_fp(user):
+    base = 'C:/Users/sanjsark/SarkSys/0-ss/2-home'
+    for i in os.listdir(base):
+        if i.split('-')[1] == user and os.path.isdir(base+'/'+i):
+            return base+'/'+i
 
 
 def isVarb(v):
@@ -3574,6 +3613,9 @@ def sudo(c):
         else:
             authenticated = True
         if authenticated:
+            if not get_f_name('/etc/sudoers'):
+                print("** E: sudoers file not found **")
+                return
             fn = get_f_name('/etc/sudoers')
             with open(fn, 'r') as f:
                 contents = f.read().splitlines()
@@ -3697,6 +3739,83 @@ def can_use_sudo(con, c):
                     return (False, "Erro: You are not authorized to run sudo as core on {}".format(getHostname()))
     else:
         return (False, "Error: You are not authorized to use sudo on {}".format(getHostname()))
+
+
+def copy(c):
+    if not read_execute_perm(os.getcwd().split('/')[-1]):
+        print("E: Permission denied")
+    if not write_execute_perm_dir(c[2]):
+        print("E: Permission denied")
+
+
+def read_execute_perm(fn):
+    p = getPerms(fn)
+    if user == findOwner(fn) or user == 'core':
+        if p[2] == 'x' and p[0] == 'r':
+            return True
+        else:
+            return False
+    elif isGroup(fpe):
+        if p[5] == 'x' and p[3] == 'r':
+            return True
+        else:
+            return False
+    else:
+        if p[8] == 'x' and p[6] == 'r':
+            return True
+        else:
+            return False
+
+def write_execute_perm_dir(fp):
+    if '/' in fp:
+        if fp.startswith('/'):
+            found = False
+            fpts = '/'+fp.split('/')[1:]
+            cur_dir = 'C:/Users/sanjsark/SarkSys/0-ss'
+            for x in fp.split('/')[1:]:
+                for i in os.listdir(cur_dir):
+                    if i.split('-')[1] == x:
+                        found = True
+                        if not execute_perm(i):
+                            return False
+                        else:
+                            cur_dir += '/'+i
+            if not found:
+                return False
+
+def execute_perm(fn):
+    p = getPerms(fn)
+    if user == findOwner(fn) or user == 'core':
+        if p[2] == 'x':
+            return True
+        else:
+            return False
+    elif isGroup(fpe):
+        if p[5] == 'x':
+            return True
+        else:
+            return False
+    else:
+        if p[8] == 'x':
+            return True
+        else:
+            return False
+
+
+def get_dir_path(path):
+    l = []
+    for i in path:
+        if not i.startswith('/'):
+            return
+        base = 'C:/Users/sanjsark/SarkSys/0-ss'
+        dp = i.split('/')[1:]
+        for pdp in dp:
+            for dpe in os.listdir(base):
+                if os.path.isdir(base+'/'+dpe) and dpe.split('-')[1] == pdp:
+                    base = base+'/'+dpe
+        l.append(base+'/')
+    return l
+
     
 
 def get_f_name(f):
@@ -3710,6 +3829,7 @@ def get_f_name(f):
                     return base+'/'+fpe
                 elif os.path.isdir(base+'/'+fpe):
                     base = base+'/'+fpe
+    return False
 
 def get_f_name_user(f):
     base = 'C:/Users/sanjsark/SarkSys/0-ss'
@@ -3793,6 +3913,8 @@ if first_try:
     cur.execute("INSERT INTO inode VALUES(10, 'sudoers', 'core', 'sudoers', '640')")
     with open('C:/Users/sanjsark/SarkSys/0-ss/5-etc/10-sudoers', 'w') as f:
         f.write('{} ALL:ALL'.format(un))
+    os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/11-bin')
+    cur.execute("INSERT INTO inode VALUES(11, 'bin', 'core', 'core', '755')")
     login(un)
     conn.commit()
     access = True
@@ -3817,15 +3939,17 @@ else:
                     pw = getpass.getpass("PassWord -> ")
                 else:
                     pw = str(input("PassWord -> "))
-        except:
+        except Exception as e:
+            print(e)
             up = coreLogin()
             un, pw = up[0], up[1]
         cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(un, enc(pw)))
         if cur.fetchall():
             access = True
             clear()
+            user = un
             llogin(un)
-            login(un)
+            #login(un)
             if un == 'core':
                 os.chdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
                 home = 'C:/Users/sanjsark/SarkSys/0-ss/1-core'
@@ -3838,7 +3962,7 @@ else:
                 if not os.path.isdir('C:/Users/sanjsark/SarkSys/0-ss/4-boot'):
                     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/4-boot')
                     cur.execute("INSERT INTO inode VALUES(4, 'boot', 'core', 'core', '755')")
-                with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/5-login', 'w') as f:
+                with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'w') as f:
                     pass
                 i = givePerm(un, un)
                 cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format('750', int(i)))
@@ -3852,12 +3976,13 @@ user = un
 if access:
 
     login(user)
+    check_ssrc(user)
 
     #breakpoint()
     
     while True:
         #breakpoint()
-        get_alias() 
+        get_alias()
         cur_d = '/' + '/'.join(os.getcwd().split('\\')[5:])
         if script_run:
             if commands:
@@ -3890,6 +4015,7 @@ if access:
             
         if len(c) == 0:
             continue
+
 
         elif c[0] == 'fi':
             continue
@@ -3926,6 +4052,7 @@ if access:
                 print("Usage: su [<username>]")
             else:
                 user = su(c, user)
+                check_ssrc(user)
 
         elif c[0] == 'useradd':
             if len(c) != 2:
@@ -3942,6 +4069,9 @@ if access:
                         is_auth = True
                 if is_auth:
                     lne = ''
+                    if not get_f_name('/etc/sudoers'):
+                        print("** Error: sudoers file not find **")
+                        continue
                     filename = get_f_name('/etc/sudoers')
                     with open(filename, 'r') as f:
                         cont = f.read().splitlines()
@@ -4142,10 +4272,10 @@ if access:
             ip(c)
 
         elif c[0] == 'cp':
-            if len(c) > 3  or len(c) < 2:
+            if len(c) != 3:
                 print("Usage: cp <source-file> <destination-file>")
             else:
-                cp(c)
+                copy(c)
 
         elif c[0] == 'alias':
             if len(c) < 2:
@@ -4222,6 +4352,18 @@ if access:
 
         elif c[0] == 'while':
             whileloop(c)
+
+        elif c[0] == 'env':
+            if len(c) == 1:
+                for i in user_env_var:
+                    print(i,'=',user_env_var[i])
+            elif len(c) == 2:
+                if c[1] in user_env_var:
+                    print(user_env_var[c[1]])
+                else:
+                    print("I: No such variable")
+            else:
+                print("Usage: env [<var>]")
                 
             
         elif c[0] == 'exit':
@@ -4232,9 +4374,47 @@ if access:
 
         else:
             if '=' in c:
-                var(c)
+                if c[0] in user_env_var:
+                    if len(c) == 3:
+                        user_env_var[c[0]] = c[2]
+                else:
+                    var(c)
             else:
-                print(c[0], ": no such command")
+                #breakpoint()
+                can_run = False
+                if user_env_var:
+                    path = user_env_var['PATH']
+                    if ':' in path:
+                        path = path.split(':')
+                    else:
+                        path = [path]
+                    path_dir = get_dir_path(path)
+                    if not path_dir:
+                        print(c[0], ": not found")
+                        continue
+                    for x in path_dir:
+                        for i in os.listdir(x):
+                            if i.split('-')[1] == c[0]:
+                                f_name = x + i
+                                file_name_i = i.split('/')[-1]
+                                can_run = True
+                                break
+                        if can_run:
+                            break
+                    if can_run:
+                        if len(c) > 1:
+                            for e, param in enumerate(c[1:]):
+                                script_parameters['@{}'.format(e+1)] = param
+                        if is_auth_x(file_name_i):
+                            script_run = True
+                            fn = get_file_name(file_name_i)
+                            with open(f_name, 'r') as f:
+                                for i in f.readlines():
+                                    commands.append(i.strip('\n'))
+                    else:
+                        print(c[0], ": not found")
+                else:
+                    print(c[0], ": not found")
                 
         if is_sudo:
             is_sudo = False
