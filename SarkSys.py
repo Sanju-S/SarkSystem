@@ -2,12 +2,13 @@ import sqlite3
 import os
 import hashlib
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 import re
 import getpass
 import math
 import socket
+import time
 from requests import get
 import re
 
@@ -35,6 +36,8 @@ conn = sqlite3.connect("data.db")
 
 cur = conn.cursor()
 
+start_time = time.time()
+
 cudo_ = False
 cd = False
 cv = ''
@@ -55,6 +58,7 @@ sigint = False
 script_parameters = {}
 old_pwd = ''
 user_env_var = {}
+successful_su = False
 
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
@@ -66,6 +70,7 @@ variables = {}
 
 editor_help = {':al': 'Adds a new line after the specified line number\nUsage- :al 3 New added line\n',
                ':aw': 'Adds new word/words after the specfied word number in specified line number\nUsage- :aw 3:2-4 new\n',
+               ':as': 'Switch auto-save on/off (defualt: off)',
                ':dd': 'Deletes the specified line form buffer\nUsage- :dd 3\n',
                ':dw': 'Deletes word/words from from the specified line number\nnUsage- :dw 3:2-4\n',
                ':h': 'Displays help\nUsage- :hl / :hl <command>\n',
@@ -297,6 +302,7 @@ def su(c, user):
     global alias
     global g_alias
     global is_su
+    global successful_su
     #breakpoint()
     if user == 'core':
         if len(c) == 1:
@@ -317,6 +323,7 @@ def su(c, user):
                 alias = {}
                 g_alias = {}
                 is_su = True
+                successful_su = True
                 return c[1]
             else:
                 print("Error: No suh user exists")
@@ -340,6 +347,7 @@ def su(c, user):
                 alias = {}
                 g_alias = {}
                 is_su = True
+                successful_su = True
                 return 'core'
             else:
                 print("Error: Incorrect credentials")
@@ -375,6 +383,7 @@ def su(c, user):
                     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/{}-{}'.format(ind, c[1])
                     variables = {}
                     is_su = True
+                    successful_su = True
                     return c[1]
                 else:
                     print("Error: Incorrect credentials")
@@ -468,65 +477,7 @@ def logs():
         print("E: Permission denied")
         addLog(user, dt(), 'logs', "E: Permission denied")
 
-def cuadd(c):
-    global cudo_
-    if user == 'core' or cudo_:
-        for i in c[1:]:
-            if i.startswith('$'):
-                if i[1:] in variables:
-                     i = variables[i[1:]]
-                else:
-                    print("E: {}: no such variable".format(i))
-                    continue
-            cur.execute("SELECT * FROM usr WHERE uname='{}'".format(i))
-            if cur.fetchone():
-                cur.execute("INSERT INTO cudoers VALUES ('{}')".format(i))
-                conn.commit()
-                print("Info: User", i, "added to cudoers successfully")
-                addLog(user, dt(), 'cuadd', "Info: User " + str(i) + " added to cudoers successfully")
-            else:
-                print("Error: User", i, " doesn't exist")
-                addLog(user, dt(), 'cuadd', "Error: User" + str(i) + " doesn't exist")
-        cudo_ = False
-    else:
-        print("Error: Permission denied.")
-        addLog(user, dt(), 'cuadd', "Error: Permission denied.")
 
-def curem(c):
-    global cudo_
-    if user == 'core' or cudo_:
-        for i in c[1:]:
-            if i.startswith('$'):
-                if i[1:] in variables:
-                     i = variables[i[1:]]
-                else:
-                    print("E: {}: no such variable".format(i))
-                    continue
-            cur.execute("SELECT * FROM usr WHERE uname='{}'".format(i))
-            if cur.fetchone():
-                cur.execute("DELETE FROM cudoers WHERE un='{}'".format(i))
-                conn.commit()
-                print("Info: User", i, "deleted from cudoers successfully")
-                addLog(user, dt(), 'curem', "Info: User " + str(i) + " deleted from cudoers successfully")
-            else:
-                print("Error: User", i, " doesn't exist")
-                addLog(user, dt(), 'curem', "Error: User" + str(i) + " doesn't exist")
-        cudo_ = False
-    else:
-        print("Error: Permission denied.")
-        addLog(user, dt(), 'curem', "Error: Permission denied.")
-
-def culist():
-    global cudo_
-    if user == 'core' or cudo_:
-        cur.execute("SELECT * FROM cudoers")
-        for i in cur.fetchall():
-            for j in i:
-                print(j)
-        cudo_ = False
-    else:
-        print("Error: Permission denied.")
-        addLog(user, dt(), 'culist', "Error: Permission denied.")
 
 def passwd(c):
     global cudo_
@@ -1567,7 +1518,7 @@ def cat (c):
             if j.split('-')[1] == i:
                 found = True
                 p = getPerms(j)[0]
-                if user == findOwner(j) or user == 'core':
+                if user == 'core' or user == findOwner(j):
                     if p[0] == 'r':
                         with open(j, 'r') as f:
                             for i in f.readlines():
@@ -1825,6 +1776,7 @@ def echo(c):
                                     l.append(i[1:])
                                 else:
                                     l.append(i)
+                            l = [str(x) for x in l]
                             f.write(' '.join(l))
                             f.write('\n')
                     else:
@@ -2255,6 +2207,27 @@ def is_authorized_w(f):
                 else:
                     return False
 
+def is_authorized_r(f):
+    for i in os.listdir():
+        if i.endswith(f) and os.path.isfile(i):
+            p = getPerms(i)[0]
+            if user == 'core' or user == findOwner(i):
+                if p[0] == 'r':
+                    return True
+                else:
+                    return False
+            elif isGroup(i):
+                if p[3] == 'r':
+                    return True
+                else:
+                    return False
+            else:
+                if p[6] == 'r':
+                    return True
+                else:
+                    return False
+                
+
 def get_file_name(f):
     for i in os.listdir():
         if i.split('-')[1] == f and os.path.isfile(i):
@@ -2291,7 +2264,7 @@ def editor(c):
     if isFile(c[1]):
         fn = get_file_name(c[1])
         
-    if not is_authorized_w(c[1]):
+    if not is_authorized_w(c[1]) or not is_authorized_r(c[1]):
         print("E: " + c[1] + ": you are not authorized")
         return
     
@@ -3856,7 +3829,54 @@ def get_f_name_user(f):
                             base = base+'/'+fpe
                         else:
                             return(False, "E: d:" + fpe.split('-')[1] + " - Permission denied")
-    
+
+
+def clear_tmp():
+    dir_name = ''
+    for i in os.listdir('C:/Users/sanjsark/SarkSys/0-ss'):
+        if i.split('-')[1] == 'tmp' and os.path.isdir('C:/Users/sanjsark/SarkSys/0-ss/'+i):
+            dir_name = 'C:/Users/sanjsark/SarkSys/0-ss/'+i
+            break
+    if dir_name:
+        for i in os.listdir(dir_name):
+            if os.path.isfile(dir_name+'/'+i):
+                os.remove(dir_name+'/'+i)
+            else:
+                shutil.rmtree(dir_name+'/'+i)
+
+
+def uptime():
+    global start_time
+    diff_time = time.time()- start_time
+    up_time = str(timedelta(seconds=diff_time)).split(':')
+    up_time[-1] = up_time[-1][:2]
+    up_time = ':'.join(up_time)
+    print("Uptime: {} | {}".format(up_time, str(datetime.fromtimestamp(int(start_time)))))
+
+
+def which(sn):
+    #breakpoint()
+    global user_env_path
+    found = False
+    path = user_env_var['PATH']
+    if ':' in path:
+        path = path.split(':')
+    else:
+        path = [path]
+    path_dir = get_dir_path(path)
+    if not path_dir:
+        print(sn, ": not found")
+        return
+    for x in path_dir:
+        for i in os.listdir(x):
+            if i.split('-')[1] == sn:
+                print(path[path_dir.index(x)]+'/'+sn)
+                found = True
+                return
+    if not found:
+        print(sn, ": script not found")
+                
+                
             
 
 
@@ -3895,7 +3915,7 @@ if first_try:
     #cur.execute("INSERT INTO cudoers VALUES ('{}')".format(un))
     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un)
     cur.execute("INSERT INTO inode VALUES(0, 'ss', 'core', 'core', '754')")
-    cur.execute("INSERT INTO inode VALUES(1, 'core', 'core', 'core', '750')")
+    cur.execute("INSERT INTO inode VALUES(1, 'core', 'core', 'core', '755')")
     cur.execute("INSERT INTO inode VALUES(2, 'home', 'core', 'core', '755')")
     cur.execute("INSERT INTO inode VALUES(3, '{}', '{}', '{}', '755')".format(un, un, un))
     cur.execute("INSERT INTO inode VALUES(4, 'boot', 'core', 'core', '755')")
@@ -3915,6 +3935,8 @@ if first_try:
         f.write('{} ALL:ALL'.format(un))
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/11-bin')
     cur.execute("INSERT INTO inode VALUES(11, 'bin', 'core', 'core', '755')")
+    os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/12-tmp')
+    cur.execute("INSERT INTO inode VALUES(12, 'tmp', 'core', 'core', '777')")
     login(un)
     conn.commit()
     access = True
@@ -3973,10 +3995,12 @@ else:
 
 user = un
 
+
 if access:
 
     login(user)
     check_ssrc(user)
+    clear_tmp()
 
     #breakpoint()
     
@@ -4039,11 +4063,11 @@ if access:
 
         elif c[0] in alias:
             cd = True
-            cv = alias[c[0]].split(' ')
+            cv = alias[c[0]].split(' ') + c[1:]
 
         elif c[0] in g_alias:
             cd = True
-            cv = g_alias[c[0]].split(' ')
+            cv = g_alias[c[0]].split(' ') + c[1:]
             
         elif c[0] == 'clear':
             clear()
@@ -4052,7 +4076,9 @@ if access:
                 print("Usage: su [<username>]")
             else:
                 user = su(c, user)
-                check_ssrc(user)
+                if successful_su:
+                    check_ssrc(user)
+                    successful_su = False
 
         elif c[0] == 'useradd':
             if len(c) != 2:
@@ -4063,7 +4089,7 @@ if access:
         elif c[0] == 'sudo':
             if len(c) >= 2 and c[1] == '-l':
                 if not is_auth:
-                    pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
+                    pw = enc(str(getpass.getpass("[sudo] PassWord for {} -> ".format(user))))
                     cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
                     if cur.fetchone():
                         is_auth = True
@@ -4085,35 +4111,7 @@ if access:
                         print("User {} cannot run sudo on {}".format(user, getHostname()))
             else:
                 sudo(c)
-                continue        
-
-        elif c[0] == 'cudo':
-            print("Info: 'cudo' has been deprecated, please use 'sudo'")
-            continue
-            if len(c) ==  1:
-                print("Usage: cudo [command]")
-            else:
-                if is_auth:
-                    cd = True
-                    cv = c[1:]
-                    cudo_ = True
-                else:
-                    if user != 'core':
-                        pw = enc(str(getpass.getpass("[cudo] PassWord for {} -> ".format(user))))
-                        cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
-                        if cur.fetchone():
-                            cur.execute("SELECT * FROM cudoers WHERE un='{}'".format(user))
-                            if cur.fetchone():
-                                is_auth = True
-                                cd = True
-                                cv = c[1:]
-                                cudo_ = True
-                            else:
-                                print("Error: You are not authorized to use cudo on {}".format(getHostname()))
-                                addLog(user, dt(), 'cudo', "Error: You are not authorized to use cudo on {}".format(getHostname()))
-                    else:
-                        cd = True
-                        cv = c[1:]
+                continue
                         
         elif c[0] == 'userdel':
             if len(c) != 2:
@@ -4126,24 +4124,6 @@ if access:
                 print("Usage: logs")
             else:
                 logs()
-
-        elif c[0] == 'cuadd':
-            if len(c) < 2:
-                print("Usage: cuadd [username1, [username2,[....]]")
-            else:
-                cuadd(c)
-
-        elif c[0] == 'curem':
-            if len(c) < 2:
-                print("Usage: curem [username1, [username2,[....]]")
-            else:
-                curem(c)
-
-        elif c[0] == 'culist':
-            if len(c) > 1:
-                print("Usage: culist")
-            else:
-                culist()
 
         elif c[0] == 'passwd':
             if len(c) > 2:
@@ -4284,8 +4264,7 @@ if access:
                 for k,v in g_alias.items():
                     print('{}: {}'.format(k, v))
             else:
-                ph = ' '.join(c[1:])
-                alias[ph.split('=')[0].replace(' ','')] = ph.split('=')[1].replace(' ','')
+                alias[c[1].replace(' ','')] = ' '.join(c[3:])
 
         elif c[0] == 'unalias':
             if len(c) < 2:
@@ -4331,6 +4310,8 @@ if access:
                 print("Usage: ss <filename>")
             else:
                 if len(c) > 2:
+                    script_parameters['@#'] = str(len(c[2:]))
+                    script_parameters['@*'] = ' '.join(c[2:])
                     for e, param in enumerate(c[2:]):
                         script_parameters['@{}'.format(e+1)] = param
                 if is_authorized_x(c[1]):
@@ -4345,6 +4326,12 @@ if access:
                 print("Usage: se <filename>")
             else:
                 editor(c)
+
+        elif c[0] == 'uptime':
+            if len(c) != 1:
+                print("Usage: uptime")
+            else:
+                uptime()
 
         elif c[0] == 'if':
             ifstat(c)
@@ -4364,10 +4351,16 @@ if access:
                     print("I: No such variable")
             else:
                 print("Usage: env [<var>]")
-                
+
+        elif c[0] == 'which':
+            if len(c) != 2:
+                print("Usage: which <script_name>")
+            else:
+                which(c[1])
             
         elif c[0] == 'exit':
             print("Exiting...")
+            clear_tmp()
             conn.commit()
             conn.close()
             sys.exit(0)
@@ -4403,6 +4396,8 @@ if access:
                             break
                     if can_run:
                         if len(c) > 1:
+                            script_parameters['@#'] = str(len(c[1:]))
+                            script_parameters['@*'] = ' '.join(c[1:])
                             for e, param in enumerate(c[1:]):
                                 script_parameters['@{}'.format(e+1)] = param
                         if is_auth_x(file_name_i):
