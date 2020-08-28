@@ -16,7 +16,7 @@ import re
 """
 Table Name | Fields
 ----------------------------------------
-usr	   | uname, passwd
+usr	   | uname, passwd, dmask, fmask
 logs	   | log
 login	   | uname, time
 inode      | in, fn, ow, gr, perm
@@ -146,10 +146,15 @@ def pd(d, user):
                 pass
         return '/' + '/'.join(l)
 
-def givePerm(usr, i):
+def givePerm(usr, i, target='file'):
+    global user
     ind = 0
-    cur.execute("SELECT * FROM dmask")
-    d = int(cur.fetchone()[0])
+    if target == 'folder':
+        cur.execute("SELECT dmask FROM usr WHERE uname='{}'".format(user))
+        d = int(cur.fetchone()[0])
+    else:
+        cur.execute("SELECT fmask FROM usr WHERE uname='{}'".format(user))
+        d = int(cur.fetchone()[0])
     cur.execute("SELECT * FROM inode ORDER BY ind DESC LIMIT 1")
     ind = cur.fetchone()[0] + 1
     cur.execute("INSERT INTO inode VALUES ({}, '{}', '{}', '{}', '{}')".format(ind, i, usr, usr, d))
@@ -422,7 +427,7 @@ def useradd(usr):
             if pw != cw:
                 print("E: passwords dont match")
                 return
-            cur.execute("INSERT INTO usr VALUES ('{}', '{}')".format(usr, pw))
+            cur.execute("INSERT INTO usr VALUES ('{}', '{}', '755', '754')".format(usr, pw))
             print("Info: User added successfully")
             addLog(user, dt(), 'useradd', "Info: User added successfully")
             cur.execute("INSERT INTO grp VALUES ('{}', '{}')".format(usr, usr+'-'))
@@ -837,19 +842,19 @@ def mkdir(c):
         p = getPerms(d)[0]
         if user == 'core' or user == findOwner(d):
             if p[1] == 'w':
-                i = givePerm(user, c[1])
+                i = givePerm(user, c[1], 'folder')
                 os.mkdir(str(i)+'-'+c[1])
             else:
                 print("E: Permission denied")
         elif isGroup:
             if p[4] == 'w':
-                i = givePerm(user, c[1])
+                i = givePerm(user, c[1], 'folder')
                 os.mkdir(str(i)+'-'+c[1])
             else:
                 print("E: Permission denied")
         else:
             if p[7] == 'w':
-                i = givePerm(user, c[1])
+                i = givePerm(user, c[1], 'folder')
                 os.mkdir(str(i)+'-'+c[1])
             else:
                 print("E: Permission denied")
@@ -1375,25 +1380,35 @@ def chmod(c):
                 print("E: file {} not found".format(i))
 
 def dmask(c):
-    global cudo_
+    global user
     if len(c) == 1:
-        cur.execute("SELECT dmask FROM dmask")
+        cur.execute("SELECT dmask FROM usr WHERE uname='{}'".format(user))
         c = str(cur.fetchone()[0])
         if len(c) < 3:
             c = (3 - len(c)) * '0' + c
         print(c)
     else:
-        if user == 'core' or cudo_:
-            if isLegalPerm(c[1]):
-                cur.execute("SELECT dmask FROM dmask")
-                cur.execute("UPDATE dmask SET dmask={} WHERE dmask={}".format(int(c[1]), int(cur.fetchone()[0])))
-                conn.commit()
-            else:
-                print("E: illegal permission")
-            cudo_ = False
+        if isLegalPerm(c[1]):
+            cur.execute("UPDATE usr SET dmask={} WHERE uname='{}'".format(int(c[1]), user))
+            conn.commit()
         else:
-            print("E: Permission denied")
-            addLog(user, dt(), 'useradd', "E: Permission denied")
+            print("E: illegal permission")
+
+def fmask(c):
+    global user
+    if len(c) == 1:
+        cur.execute("SELECT fmask FROM usr WHERE uname='{}'".format(user))
+        c = str(cur.fetchone()[0])
+        if len(c) < 3:
+            c = (3 - len(c)) * '0' + c
+        print(c)
+    else:
+        if isLegalPerm(c[1]):
+            cur.execute("UPDATE usr SET fmask={} WHERE uname='{}'".format(int(c[1]), user))
+            conn.commit()
+        else:
+            print("E: illegal permission")
+
     
 def me():
     print("Username:", user)
@@ -2568,7 +2583,7 @@ def getip(c):
 def ip(c):
     if len(c) == 1 or (len(c) == 2 and c[1] == '-s'):
         try:
-            print("Hostname: {}".format(socket.gethostname()))
+            print("Physical hostname: {}".format(socket.gethostname()))
             print("IP Addr: {}".format(socket.gethostbyname(socket.gethostname())))
         except:
             print("E: an error occured")
@@ -3855,10 +3870,14 @@ def uptime():
 
 
 def which(sn):
-    #breakpoint()
+    global alias, g_alias
     global user_env_path
     found = False
     path = user_env_var['PATH']
+    al = {**alias, **g_alias}
+    if sn in al:
+        print(sn,"is aliased to", al[sn])
+        return
     if ':' in path:
         path = path.split(':')
     else:
@@ -3897,22 +3916,18 @@ if first_try:
         pw = getpass.getpass("Enter PassWord -> ")
     else:
         pw = str(input("Enter PassWord -> "))
-    cur.execute("CREATE TABLE usr (uname VARCHAR(20), passwd VARCHAR(20));")
-    #cur.execute("CREATE TABLE cudoers (un VARCHAR(20));")
+    cur.execute("CREATE TABLE usr (uname VARCHAR(20), passwd VARCHAR(20), dmask VARCHAR(10), fmask VARCHAR(10));")
     cur.execute("CREATE TABLE logs (log VARCHAR(20));")
     cur.execute("CREATE TABLE inode (ind INTEGER(10), fn VARCHAR(20), ow VARCHAR(20), gr VARCHAR(20), perm VARCHAR(5))")
-    cur.execute("CREATE TABLE dmask (dmask INTEGER(5))")
     cur.execute("CREATE TABLE login (uname VARCHAR(20), time VARCHAR(20));")
     cur.execute("CREATE TABLE grp (uname TEXT, grps TEXT)")
     cur.execute("INSERT INTO grp VALUES('{}', '{}')".format('core', 'core-'))
     cur.execute("INSERT INTO grp VALUES('{}', '{}')".format(un, un+'-'))
-    cur.execute("INSERT INTO dmask VALUES (754)")
-    cur.execute("INSERT INTO usr VALUES ('core', '{}')".format(enc(cp)))
+    cur.execute("INSERT INTO usr VALUES ('core', '{}', '755', '754')".format(enc(cp)))
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/1-core')
-    cur.execute("INSERT INTO usr VALUES ('{}', '{}')".format(un, enc(pw)))
+    cur.execute("INSERT INTO usr VALUES ('{}', '{}', '755', '754')".format(un, enc(pw)))
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un))
     os.chdir('C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un))
-    #cur.execute("INSERT INTO cudoers VALUES ('{}')".format(un))
     home = 'C:/Users/sanjsark/SarkSys/0-ss/2-home/3-{}'.format(un)
     cur.execute("INSERT INTO inode VALUES(0, 'ss', 'core', 'core', '754')")
     cur.execute("INSERT INTO inode VALUES(1, 'core', 'core', 'core', '755')")
@@ -4199,6 +4214,12 @@ if access:
                 print("Usage: dmask <value>")
             else:
                 dmask(c)
+
+        elif c[0] == 'fmask':
+            if len(c) > 2:
+                print("Usage: fmask <value>")
+            else:
+                fmask(c)
 
         elif c[0] == 'me':
             if len(c) > 1:
