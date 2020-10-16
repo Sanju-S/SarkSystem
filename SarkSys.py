@@ -11,6 +11,7 @@ import socket
 import time
 from requests import get
 import re
+from pyfiglet import Figlet
 
 
 """
@@ -38,12 +39,16 @@ cur = conn.cursor()
 
 start_time = time.time()
 
+live = 1
+
 cudo_ = False
 cd = False
 cv = ''
 is_auth = False
 
 script_run = False
+sudo_prev = False
+sudo_prev_command = []
 rip = 0
 commands = []
 alias = {}
@@ -63,7 +68,6 @@ successful_su = False
 root = 'C:/Users/sanjsark/SarkSys/0-ss'
 home = ''
 
-live = 1
 up = ''
 
 variables = {}
@@ -292,7 +296,7 @@ def convert_size(size_bytes):
 
 def get_file_data(f):
     d  = str((os.stat(str(f)))).split(' ')
-    return [datetime.fromtimestamp(int(d[-2][9:-1])).strftime('%B %d, %Y %I:%M'), convert_size(int(d[6][8:-1]))]
+    return [datetime.fromtimestamp(int(d[-2][9:-1])).strftime('%b %d, %Y %I:%M'), convert_size(int(d[6][8:-1]))]
     
 
 # Command codes --------------------------------------------------------------------------------------------------------------------------
@@ -936,8 +940,8 @@ def rm(c):
                             remFile(j.split('-')[0])
                             continue
                         if user != o:
-                            print("Error: " + j.split('-')[1] + "- you are not authorized")
-                            addLog(user, dt(), 'rm', "Error: " + j.split('-')[1] + "- you are not authorized")
+                            print("Error: " + j.split('-')[1] + "- Permission denied")
+                            addLog(user, dt(), 'rm', "Error: " + j.split('-')[1] + "- Permission denied")
                             continue
                         os.remove(j)
                         remFile(j.split('-')[0])
@@ -962,8 +966,8 @@ def rm(c):
                             found = True
                             continue
                         if user != o:
-                            print("Error: " + i + "- you are not authorized")
-                            addLog(user, dt(), 'rm', "Error: " + i + "- you are not authorized")
+                            print("Error: " + i + "- Permission denied")
+                            addLog(user, dt(), 'rm', "Error: " + i + "- Permission denied")
                             found = True
                             continue
                         os.remove(j)
@@ -1347,8 +1351,8 @@ def chmod(c):
                 conn.commit()
                 continue
             if user != vl:
-                print("Error: " + i.split('-')[1] + "- you are not authorized")
-                addLog(user, dt(), 'chmod', "Error: " + i.split('-')[1] + "- you are not authorized")
+                print("Error: " + i.split('-')[1] + "- Permission denied")
+                addLog(user, dt(), 'chmod', "Error: " + i.split('-')[1] + "- Permission denied")
                 continue
             cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format(c[1], int(i.split('-')[0])))
             conn.commit()
@@ -1371,8 +1375,8 @@ def chmod(c):
                         conn.commit()
                         continue
                     if user != vl:
-                        print("Error: " + i + "- you are not authorized")
-                        addLog(user, dt(), 'chmod', "Error: " + i + "- you are not authorized") 
+                        print("Error: " + i + "- Permission denied")
+                        addLog(user, dt(), 'chmod', "Error: " + i + "- Permission denied") 
                         continue
                     cur.execute("UPDATE inode SET perm='{}' WHERE ind={}".format(c[1], int(j.split('-')[0])))
                     conn.commit()
@@ -1439,25 +1443,47 @@ def groupadd(c):
     cudo_ = False
 
 def chown(c):
-    cur.execute("SELECT * FROM usr WHERE uname='{}'".format(user))
-    if not cur.fetchone():
-        print("E: no such user")
-        return
-    for i in c[2:]:
-        if i.startswith('$'):
-                if i[1:] in variables:
-                    i = variables[i[1:]]
-                else:
-                    print("E: {}: no such variable".format(i))
-                    continue
-        for j in os.listdir():
-            if j.endswith(i):
-                o = findOwner(j)
-                if o == user or user == 'core':
-                    cur.execute("UPDATE inode SET ow='{}' WHERE ind={}".format(c[1], int(j.split('-')[0])))
-                    conn.commit()
-                else:
-                    print("E: " + i + " you are authorized")
+    if ':' in c[1]:
+        cur.execute("SELECT * FROM usr WHERE uname='{}'".format(c[1].split(':')[0]))
+        if not cur.fetchone():
+            print("E: no such user")
+            return
+        for i in c[2:]:
+            if i.startswith('$'):
+                    if i[1:] in variables:
+                        i = variables[i[1:]]
+                    else:
+                        print("E: {}: no such variable".format(i))
+                        continue
+            for j in os.listdir():
+                if j.endswith(i):
+                    o = findOwner(j)
+                    if o == user or user == 'core':
+                        cur.execute("UPDATE inode SET ow='{}' WHERE ind={}".format(c[1].split(':')[0], int(j.split('-')[0])))
+                        cur.execute("UPDATE inode SET gr='{}' WHERE ind={}".format(c[1].split(':')[1], int(j.split('-')[0])))
+                        conn.commit()
+                    else:
+                        print("E: " + i + " you are authorized")
+    else:
+        cur.execute("SELECT * FROM usr WHERE uname='{}'".format(c[1]))
+        if not cur.fetchone():
+            print("E: no such user")
+            return
+        for i in c[2:]:
+            if i.startswith('$'):
+                    if i[1:] in variables:
+                        i = variables[i[1:]]
+                    else:
+                        print("E: {}: no such variable".format(i))
+                        continue
+            for j in os.listdir():
+                if j.endswith(i):
+                    o = findOwner(j)
+                    if o == user or user == 'core':
+                        cur.execute("UPDATE inode SET ow='{}' WHERE ind={}".format(c[1], int(j.split('-')[0])))
+                        conn.commit()
+                    else:
+                        print("E: " + i + " you are authorized")
 
 def chgroup(c):
     cur.execute("SELECT * FROM usr WHERE uname='{}'".format(user))
@@ -1492,7 +1518,7 @@ def cat (c):
 
         if i.startswith('/'):
             can, msg = get_f_name_user(i)
-            if can:
+            if can and os.path.isdir(get_f_name(i)):
                 found = True
                 j = msg.split('/')[-1]
                 p = getPerms(j)[0]
@@ -1530,7 +1556,7 @@ def cat (c):
                 print(msg)
                 continue
         for j in os.listdir():
-            if j.split('-')[1] == i:
+            if j.split('-')[1] == i and os.path.isfile(j):
                 found = True
                 p = getPerms(j)[0]
                 if user == 'core' or user == findOwner(j):
@@ -1619,7 +1645,7 @@ def inlog(c):
                 f.write(c[1])
             cudo_ = False
         else:
-            print("E: you are not authorized")
+            print("E: Permission denied")
 
 def echo(c):
     #breakpoint()
@@ -2280,7 +2306,7 @@ def editor(c):
         fn = get_file_name(c[1])
         
     if not is_authorized_w(c[1]) or not is_authorized_r(c[1]):
-        print("E: " + c[1] + ": you are not authorized")
+        print("E: " + c[1] + ": Permission denied")
         return
     
         
@@ -3641,7 +3667,7 @@ def can_use_sudo(con, c):
             break
     if len(c) >= 2:
         if c[1].startswith('-'):
-            if c[1] not in ['-u']:
+            if c[1] not in ['-u', '-l']:
                 return (False, "Error: parameter '{}' not recognozed".format(c[1]))
     if len(c) >=2 and c[1] == '-u':
         if len(c) < 3:
@@ -3666,14 +3692,14 @@ def can_use_sudo(con, c):
                             return (True, c[2])
                         return (True, 'core')
                     else:
-                        return (False, "Error: You are not authorized to use {} as sudo on {}".format(c[3], getHostname()))
+                        return (False, "Error: Permission denied to use {} as sudo on {}".format(c[3], getHostname()))
                 else:
                     if len(c) >= 2 and c[1] in su_cmds.split(','):
                         if len(c) >= 3 and c[1] == '-u':
                             return (True, c[2])
                         return (True, 'core')
                     else:
-                        return (False, "Error: You are not authorized to use {} as core on {}".format(c[1], getHostname()))
+                        return (False, "Error: Permission denied to use {} as core on {}".format(c[1], getHostname()))
         else:
             if len(c) >= 3 and c[1] == '-u':
                 if c[2] in su_users.split(','):
@@ -3692,7 +3718,7 @@ def can_use_sudo(con, c):
                             elif len(c) == 3:
                                 return (False, "Info: No command specified")
                             else:
-                                return (False, "Error: You are not authorized to use {} on {}".format(c[3], getHostname()))
+                                return (False, "Error: Permission denied to use {} on {}".format(c[3], getHostname()))
                         else:
                             if len(c) >= 3 and c[1] in su_cmds.split(','):
                                 if len(c) >= 3 and c[1] == '-u':
@@ -3701,9 +3727,9 @@ def can_use_sudo(con, c):
                             elif len(c) == 3:
                                 return (False, "Info: No command specified")
                             else:
-                                return (False, "Error: You are not authorized to use {} on {}".format(c[3], getHostname()))
+                                return (False, "Error: Permission denied to use {} on {}".format(c[3], getHostname()))
                 else:
-                    return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[2], getHostname()))
+                    return (False, "Error: Permission denied to run sudo as {} on {}".format(c[2], getHostname()))
             else:
                 if 'core' in su_users.split(','):
                     if su_cmds.upper() == 'ALL':
@@ -3715,18 +3741,18 @@ def can_use_sudo(con, c):
                                     return (True, c[1])
                                 return (True, 'core')
                             else:
-                                return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[3], getHostname()))
+                                return (False, "Error: Permission denied to run sudo as {} on {}".format(c[3], getHostname()))
                         else:
                             if len(c) >= 3 and c[1] in su_cmds.split(','):
                                 if len(c) >= 3 and c[1] == '-u':
                                     return (True, c[1])
                                 return (True, 'core')
                             else:
-                                return (False, "Error: You are not authorized to run sudo as {} on {}".format(c[3], getHostname()))
+                                return (False, "Error: Permission denied to run sudo as {} on {}".format(c[3], getHostname()))
                 else:
-                    return (False, "Erro: You are not authorized to run sudo as core on {}".format(getHostname()))
+                    return (False, "Erro: Permission denied to run sudo as core on {}".format(getHostname()))
     else:
-        return (False, "Error: You are not authorized to use sudo on {}".format(getHostname()))
+        return (False, "Error: Permission denied to use sudo on {}".format(getHostname()))
 
 
 def copy(c):
@@ -3894,6 +3920,24 @@ def which(sn):
                 return
     if not found:
         print(sn, ": script not found")
+
+
+
+def figlet(c):
+    if c[1] == '--getfonts':
+        f = Figlet()
+        for i in f.getFonts():
+            if '_' not in i:
+                print(i)
+        return
+    if c[1] == '-f':
+        fnt = c[2]
+        string = ' '.join(c[3:])
+    else:
+        fnt = 'slant'
+        string = ' '.join(c[1:])
+    f = Figlet(font = fnt)
+    print(f.renderText(string))
                 
                 
             
@@ -3937,12 +3981,12 @@ if first_try:
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/4-boot')
     cur.execute("INSERT INTO inode VALUES(5, 'etc', 'core', 'core', '755')")
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/5-etc')
-    cur.execute("INSERT INTO inode VALUES(9, 'host', 'core', 'core', '777')")
+    cur.execute("INSERT INTO inode VALUES(9, 'host', 'core', 'core', '555')")
     os.mkdir('C:/Users/sanjsark/SarkSys/0-ss/5-etc/9-host')
     cur.execute("INSERT INTO inode VALUES(6, 'login', 'core', 'core', '664')")
     with open('C:/Users/sanjsark/SarkSys/0-ss/4-boot/6-login', 'w') as f:
         pass
-    cur.execute("INSERT INTO inode VALUES(7, 'hostname', 'core', 'core', '766')")
+    cur.execute("INSERT INTO inode VALUES(7, 'hostname', 'core', 'core', '764')")
     with open('C:/Users/sanjsark/SarkSys/0-ss/5-etc/9-host/7-hostname', 'w') as f:
         f.write('SarkSys')
     cur.execute("INSERT INTO inode VALUES(10, 'sudoers', 'core', 'sudoers', '640')")
@@ -3958,17 +4002,28 @@ if first_try:
     clear()
 else:
     print("**SarkSys**")
+    attempt = 0
     while True:
         try:
             if fixUser():
-                us = fixUser()
-                print("An initial user is found, please enter your password to continue")
-                print("Welcome, {}".format(us))
-                un = us
-                if live:
-                    pw = getpass.getpass("PassWord -> ")
+                if attempt >= 3:
+                    clear()
+                    print("Please authencticate with other user.")
+                    un = input("UserName -> ")
+                    if live:
+                        pw = getpass.getpass("PassWord -> ")
+                    else:
+                        pw = str(input("PassWord -> "))
                 else:
-                    pw = str(input("PassWord -> "))
+                    us = fixUser()
+                    print("An initial user is found, please enter your password to continue")
+                    print("Welcome, {}".format(us))
+                    un = us
+                    if live:
+                        pw = getpass.getpass("PassWord -> ")
+                    else:
+                        pw = str(input("PassWord -> "))
+                    attempt += 1
             else:
                 print("Welcome, please authenticate.")
                 un = input("UserName -> ")
@@ -4010,7 +4065,6 @@ else:
 
 user = un
 
-
 if access:
 
     login(user)
@@ -4038,6 +4092,9 @@ if access:
                     script_run = False
                     run_now = True
                     script_parameters = {}
+        elif sudo_prev:
+            c = sudo_prev_command[0]
+            sudo_prev = False
         elif not cd or run_now:
             c = input("{}@{}[{}]{} ".format(getHostname(), user.upper(), pd(cur_d, user), '#' if user == 'core' else '$')).split()
         else:
@@ -4124,6 +4181,14 @@ if access:
                         print(lne)
                     else:
                         print("User {} cannot run sudo on {}".format(user, getHostname()))
+            elif len(c) >= 2 and c[1] == '!!':    
+                if not is_auth:
+                    pw = enc(str(getpass.getpass("[sudo] PassWord for {} -> ".format(user))))
+                    cur.execute("SELECT * FROM usr WHERE uname='{}' AND passwd='{}'".format(user, pw))
+                    if cur.fetchone():
+                        is_auth = True
+                if is_auth:
+                    sudo_prev = True
             else:
                 sudo(c)
                 continue
@@ -4235,7 +4300,7 @@ if access:
 
         elif c[0] == 'chown':
             if len(c) < 3:
-                print("Usage:chown [uname] [filename1,[filename2[,]]]")
+                print("Usage:chown [uname[:groupname]] [filename1,[filename2[,]]]")
             else:
                 chown(c)
 
@@ -4378,6 +4443,12 @@ if access:
                 print("Usage: which <script_name>")
             else:
                 which(c[1])
+
+        elif c[0] == 'figlet':
+            if len(c) < 2:
+                print("Usage: figlet <string>")
+            else:
+                figlet(c)
             
         elif c[0] == 'exit':
             print("Exiting...")
@@ -4438,3 +4509,8 @@ if access:
                 is_su = False
                 continue
             user = cur_user
+
+        sudo_prev_command.append(['sudo']+c)
+        if len(sudo_prev_command) > 2:
+            del sudo_prev_command[:-2]
+    
