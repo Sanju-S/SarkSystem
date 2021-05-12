@@ -1,9 +1,9 @@
 # SarkSystem
 A Linux Bash like shell made using Python.
 
-This scirpt provides basic functionality of unix shells like bash, sh, etc.
-This script in no way provides all the high level or all the functionality of those shells!
+You need no prior knowledge of python to run it, but to debug it??? sure you do.
 
-I know the code may have a lot of bugs, some of which were able to hide from my eyes while some where kept by me.
+This in no way a complete replace for your beloved unix shell but a complete(yet noob style) rip off of one, written in python.
+The development is still under progress (as everyone says).
 
-It's just a fun little code written by me, just so that I can do a litlte time pass while I am try not to get bored.
+Please use it, smash it, break it or whatever.
